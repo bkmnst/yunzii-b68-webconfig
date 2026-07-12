@@ -29,7 +29,7 @@ The native implementation chunks larger transfers at 512 data bytes. Read operat
 
 | Command | Read/write | Vendor method | Status |
 | --- | --- | --- | --- |
-| `0x04` | write | `SetLED` | Envelope confirmed; data layout still being decoded |
+| `0x04` | write | `SetLED` | 128-byte constructed record; data layout partly recovered |
 | `0x84` | read | `GetLED` | 400-byte data block; shipped as a guarded diagnostic read |
 | `0x05` / `0x85` | write/read | `SetMacro` / `GetMacro` | Envelope confirmed; data layout pending |
 | `0x06` / `0x86` | write/read | `SetGame` / `GetGame` | Envelope confirmed; selector/layout pending |
@@ -49,7 +49,9 @@ The wired sync routine calls `GetLED` with exactly 400 bytes and retries malform
 
 The response must echo command `0x84`, selector zero, reserved zero, page 1, and length 400 before its data is accepted. The vendor sync routine additionally validates fields inside the data block; those offsets are not yet all named.
 
-The write path builds a separate 512-byte RGB table and calls the vtable method at offset `0x70` (`SetLedRgbTab`, command `0x0A`). It places the validity bytes `5A A5` at table offsets 506 and 507. The table contains groups of RGB triplets assembled from the application model. This table is not the same packet as live RGB report command `0x08`.
+The normal write path does **not** write the 400-byte read buffer back. It constructs a fresh 128-byte record, passes it to `SetLED`, waits 60 ms, and invokes a separate apply/commit method. Confirmed constructed offsets include an effect-state flag at 9, hardware effect ID at 10, another effect parameter at 11, side-light fields at 18–21, optional settings at 22–24, two `FF` sentinels at 56–57, and a sequence of packed pairs beginning at 58. The semantic names of every field still require correlation with a real response or additional static evidence.
+
+The write path also builds a separate 512-byte RGB table and calls the vtable method at offset `0x70` (`SetLedRgbTab`, command `0x0A`). It places the validity bytes `5A A5` at table offsets 506 and 507. The table contains groups of RGB triplets assembled from the application model. This table is not the same packet as live RGB report command `0x08`.
 
 ## Firmware and battery
 
