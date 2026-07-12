@@ -63,6 +63,8 @@ The normal write path does **not** write the 400-byte read buffer back. It const
 
 Debounce is independently confirmed at record offset 3 and the B68 configuration constrains it to 1–4 ms. The shipped typed debounce operation starts from the validated 128-byte record, changes only offset 3, sends command `04` with declared length 128, waits 60 ms, and requires a fresh validated `GetLED` response to echo the requested value. No other unknown record byte is modified.
 
+The onboard hardware effect ID is independently confirmed at record offset 10 and is constrained to the exact 20-entry `LedOpt` table from `KB.ini`. The typed effect operation preserves every other byte from the validated record and likewise requires a fresh `GetLED` readback to echo the requested effect ID.
+
 The B68 definition supplies 20 ordered effect entries and five capability flags after each hardware effect ID: speed, brightness, direction, random color, and fixed color. These are encoded in `src/effects.ts`; controls must be shown or enabled from those flags rather than assumed globally. The generic constructor also contains wheel and side-light branches, but they are model-flagged and are not treated as B68 features without matching B68 evidence.
 
 The write path also builds a separate 512-byte RGB table and calls the vtable method at offset `0x70` (`SetLedRgbTab`, command `0x0A`). It places the validity bytes `5A A5` at table offsets 506 and 507. The table contains groups of RGB triplets assembled from the application model. This table is not the same packet as live RGB report command `0x08`.

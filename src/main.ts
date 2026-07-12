@@ -24,6 +24,7 @@ import { KeyboardTransport } from './transport'
 import type { DeviceStatus, MetricResult } from './types'
 import { B68_WIRED_PRODUCT_ID, B68_WIRED_VENDOR_ID, firmwareFromUsbDescriptor } from './usb-firmware'
 import { encodeSafeSpecialAssignment, LIGHTING_ASSIGNMENTS, SAFE_DEVICE_ASSIGNMENTS } from './special-assignments'
+import { B68_LIGHTING_EFFECTS } from './effects'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 const transport = new KeyboardTransport()
@@ -82,6 +83,8 @@ app.innerHTML = `
         <span id="last-refresh">Not refreshed</span>
       </div>
       <div class="profile-controls hardware-controls">
+        <label>Onboard effect <select id="onboard-effect-setting"></select></label>
+        <button id="apply-onboard-effect" class="secondary" disabled>Apply and verify effect</button>
         <label>Debounce <select id="debounce-setting"><option value="1">1 ms</option><option value="2">2 ms</option><option value="3">3 ms</option><option value="4">4 ms</option></select></label>
         <button id="apply-debounce" class="secondary" disabled>Apply and verify debounce</button>
       </div>
@@ -165,6 +168,8 @@ const ui = {
   readUsbFirmware: document.querySelector<HTMLButtonElement>('#read-usb-firmware')!,
   debounceSetting: document.querySelector<HTMLSelectElement>('#debounce-setting')!,
   applyDebounce: document.querySelector<HTMLButtonElement>('#apply-debounce')!,
+  onboardEffectSetting: document.querySelector<HTMLSelectElement>('#onboard-effect-setting')!,
+  applyOnboardEffect: document.querySelector<HTMLButtonElement>('#apply-onboard-effect')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
   inspectMacros: document.querySelector<HTMLButtonElement>('#inspect-macros')!,
@@ -213,6 +218,8 @@ const selectedLeds = new Set<number>()
 const keyColors = new Map<number, { red: number; green: number; blue: number }>()
 let lightingProfiles: LightingProfile[] = loadStoredProfiles(localStorage)
 let stagedMatrix: B68MatrixLayer | null = null
+
+for (const effect of B68_LIGHTING_EFFECTS) ui.onboardEffectSetting.add(new Option(effect.name, String(effect.hardwareId)))
 
 for (const layer of B68_LAYERS) ui.remapLayer.add(new Option(layer.toUpperCase(), layer))
 for (const key of B68_KEYS) ui.remapKey.add(new Option(key.label, String(key.ledIndex)))
@@ -317,7 +324,10 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.onboardEffectDetail.textContent = onboardEffectDetail
   ui.debounce.textContent = debounce
   ui.debounceDetail.textContent = debounceDetail
-  if (status.configuration.state === 'available') ui.debounceSetting.value = String(status.configuration.value.debounceMs)
+  if (status.configuration.state === 'available') {
+    ui.debounceSetting.value = String(status.configuration.value.debounceMs)
+    ui.onboardEffectSetting.value = String(status.configuration.value.hardwareEffectId)
+  }
   ui.title.textContent = status.connected ? (status.productName || status.knownDevice!.displayName) : 'Waiting for a keyboard'
   ui.pill.textContent = status.connected ? 'Connected' : 'Disconnected'
   ui.pill.classList.toggle('connected', status.connected)
@@ -330,6 +340,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.refresh.disabled = !status.connected
   ui.readUsbFirmware.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired' || !navigator.usb
   ui.applyDebounce.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
+  ui.applyOnboardEffect.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
   ui.copy.disabled = !status.connected
   ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.inspectMacros.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
@@ -399,6 +410,19 @@ ui.applyDebounce.addEventListener('click', async () => {
     ui.notice.textContent = `Debounce set to ${debounceMs} ms and verified.`
   } catch (error) {
     ui.notice.textContent = error instanceof Error ? error.message : 'The debounce setting was not verified.'
+  }
+  render()
+})
+ui.applyOnboardEffect.addEventListener('click', async () => {
+  const hardwareEffectId = Number(ui.onboardEffectSetting.value)
+  const effect = B68_LIGHTING_EFFECTS.find((candidate) => candidate.hardwareId === hardwareEffectId)
+  ui.applyOnboardEffect.disabled = true
+  ui.notice.textContent = `Applying ${effect?.name ?? `effect ${hardwareEffectId}`} and verifying hardware readback…`
+  try {
+    await transport.applyOnboardEffect(hardwareEffectId)
+    ui.notice.textContent = `${effect?.name ?? 'Onboard effect'} applied and verified.`
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The onboard effect was not verified.'
   }
   render()
 })

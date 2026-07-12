@@ -30,11 +30,11 @@ function matrixResponse(matrix: B68MatrixLayer): DataView {
   return new DataView(response.buffer)
 }
 
-function configurationResponse(debounceMs: number): DataView {
+function configurationResponse(debounceMs: number, hardwareEffectId = 13): DataView {
   const response = new Uint8Array(519)
   response.set([0x84, 0, 0, 1, 0, 0x90, 1])
   response[7 + 3] = debounceMs
-  response[7 + 10] = 13
+  response[7 + 10] = hardwareEffectId
   response[7 + 126] = 0x5a
   response[7 + 127] = 0xa5
   return new DataView(response.buffer)
@@ -240,6 +240,28 @@ describe('KeyboardTransport', () => {
     await transport.connect(device)
     await transport.inspectOnboardLighting()
     await expect(transport.applyDebounce(4)).rejects.toThrow('did not confirm')
+  })
+
+  it('changes only an allowlisted effect ID and requires matching readback', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn()
+        .mockResolvedValueOnce(configurationResponse(1, 13))
+        .mockResolvedValueOnce(configurationResponse(1, 19)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectOnboardLighting()
+    await transport.applyOnboardEffect(19)
+
+    const payload = vi.mocked(device.sendFeatureReport).mock.calls[1][1] as Uint8Array
+    expect([...payload.slice(0, 7)]).toEqual([4, 0, 0, 1, 0, 128, 0])
+    expect(payload[7 + 3]).toBe(1)
+    expect(payload[7 + 10]).toBe(19)
+    expect(transport.status().configuration).toMatchObject({ state: 'available', value: { hardwareEffectId: 19 } })
   })
 
   it('uses the confirmed read-only GetMatrix request for the default layer', async () => {

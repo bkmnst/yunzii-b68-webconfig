@@ -29,6 +29,19 @@ describe('B68 onboard configuration', () => {
     expect(() => buildSetConfigurationPayload(baseline, { debounceMs: 0 })).toThrow('1 to 4')
   })
 
+  it('patches only an allowlisted hardware effect ID', () => {
+    const bytes = new Uint8Array(128)
+    bytes[3] = 1
+    bytes[10] = 13
+    bytes[126] = 0x5a
+    bytes[127] = 0xa5
+    const baseline = parseB68OnboardConfiguration(bytes)
+    const payload = buildSetConfigurationPayload(baseline, { hardwareEffectId: 19 })
+    expect(payload[7 + 10]).toBe(19)
+    expect(payload[7 + 3]).toBe(1)
+    expect(() => buildSetConfigurationPayload(baseline, { hardwareEffectId: 255 })).toThrow('Unknown')
+  })
+
   it('rejects bad markers and debounce bounds while preserving unknown effects', () => {
     const record = new Uint8Array(128)
     record[3] = 1
