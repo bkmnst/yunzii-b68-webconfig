@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   B68_LED_SLOT_COUNT,
   buildLiveRgbPayload,
+  buildPerKeyRgbPayload,
   hasConfirmedQuery,
   LIVE_RGB_PAYLOAD_LENGTH,
   validateBattery,
@@ -44,5 +45,20 @@ describe('live RGB report', () => {
     expect(() => buildLiveRgbPayload({ red: -1, green: 0, blue: 0 })).toThrow(RangeError)
     expect(() => buildLiveRgbPayload({ red: 256, green: 0, blue: 0 })).toThrow(RangeError)
     expect(() => buildLiveRgbPayload({ red: 1.5, green: 0, blue: 0 })).toThrow(RangeError)
+  })
+
+  it('places per-key colors at sparse B68 LED indices', () => {
+    const colors = new Map([
+      [1, { red: 255, green: 0, blue: 0 }],
+      [95, { red: 0, green: 0, blue: 255 }],
+    ])
+    const payload = buildPerKeyRgbPayload(colors)
+    expect([...payload.slice(10, 13)]).toEqual([255, 0, 0])
+    expect([...payload.slice(7 + 95 * 3, 10 + 95 * 3)]).toEqual([0, 0, 255])
+    expect([...payload.slice(7, 10)]).toEqual([0, 0, 0])
+  })
+
+  it('rejects per-key colors outside the B68 LED range', () => {
+    expect(() => buildPerKeyRgbPayload(new Map([[96, { red: 1, green: 2, blue: 3 }]]))).toThrow(RangeError)
   })
 })

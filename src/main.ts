@@ -1,5 +1,6 @@
 import './style.css'
 import { DEVICE_FILTERS, matchKnownDevice, preferWired } from './devices'
+import { B68_KEY_ROWS } from './layout'
 import { KeyboardTransport } from './transport'
 import type { DeviceStatus, MetricResult } from './types'
 
@@ -51,16 +52,21 @@ app.innerHTML = `
     </section>
 
     <section class="lighting-panel" aria-labelledby="lighting-title">
-      <div>
+      <div class="lighting-heading">
+        <div>
         <p class="kicker">Lighting preview</p>
-        <h2 id="lighting-title">Live solid color</h2>
-        <p>Preview a color through the B68 real-time RGB channel. This does not overwrite an onboard profile.</p>
-      </div>
-      <div class="color-control">
+        <h2 id="lighting-title">Live and per-key color</h2>
+        <p>Select no keys to color the whole board, or select keys below to paint a custom layout. This does not overwrite an onboard profile.</p>
+        </div>
+        <div class="color-control">
         <input id="live-color" type="color" value="#c8ff43" aria-label="Live keyboard color" />
-        <button id="apply-color" class="secondary" disabled>Apply live preview</button>
+        <button id="apply-color" class="secondary" disabled>Apply whole board</button>
+        <button id="paint-keys" class="secondary" disabled>Paint selected</button>
+        <button id="clear-keys" class="secondary" disabled>Clear custom colors</button>
         <button id="stop-color" class="secondary" disabled>Stop preview</button>
+        </div>
       </div>
+      <div id="key-grid" class="keyboard-grid" aria-label="B68 per-key lighting editor"></div>
     </section>
 
     <section class="trust-grid">
@@ -89,6 +95,9 @@ const ui = {
   applyColor: document.querySelector<HTMLButtonElement>('#apply-color')!,
   liveColor: document.querySelector<HTMLInputElement>('#live-color')!,
   stopColor: document.querySelector<HTMLButtonElement>('#stop-color')!,
+  paintKeys: document.querySelector<HTMLButtonElement>('#paint-keys')!,
+  clearKeys: document.querySelector<HTMLButtonElement>('#clear-keys')!,
+  keyGrid: document.querySelector<HTMLElement>('#key-grid')!,
   notice: document.querySelector<HTMLElement>('#notice')!,
   title: document.querySelector<HTMLElement>('#status-title')!,
   pill: document.querySelector<HTMLElement>('#connection-pill')!,
@@ -100,6 +109,32 @@ const ui = {
   identity: document.querySelector<HTMLElement>('#identity')!,
   lastRefresh: document.querySelector<HTMLElement>('#last-refresh')!,
   diagnostics: document.querySelector<HTMLElement>('#diagnostic-output')!,
+}
+
+const selectedLeds = new Set<number>()
+const keyColors = new Map<number, { red: number; green: number; blue: number }>()
+
+for (const row of B68_KEY_ROWS) {
+  const rowElement = document.createElement('div')
+  rowElement.className = 'keyboard-row'
+  for (const key of row) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'keyboard-key'
+    button.textContent = key.label
+    button.dataset.led = String(key.ledIndex)
+    button.style.setProperty('--key-width', String(key.width ?? 1))
+    button.setAttribute('aria-pressed', 'false')
+    button.addEventListener('click', () => {
+      if (selectedLeds.has(key.ledIndex)) selectedLeds.delete(key.ledIndex)
+      else selectedLeds.add(key.ledIndex)
+      const selected = selectedLeds.has(key.ledIndex)
+      button.classList.toggle('selected', selected)
+      button.setAttribute('aria-pressed', String(selected))
+    })
+    rowElement.append(button)
+  }
+  ui.keyGrid.append(rowElement)
 }
 
 function describe<T>(result: MetricResult<T>, formatter: (value: T) => string): [string, string] {
@@ -132,6 +167,8 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.copy.disabled = !status.connected
   ui.applyColor.disabled = !status.connected
   ui.stopColor.disabled = !status.connected || !transport.livePreviewActive
+  ui.paintKeys.disabled = !status.connected
+  ui.clearKeys.disabled = !status.connected || keyColors.size === 0
   ui.lastRefresh.textContent = status.lastRefresh ? `Updated ${status.lastRefresh.toLocaleTimeString()}` : 'Not refreshed'
   const diagnostics = transport.diagnostics()
   ui.diagnostics.textContent = diagnostics ? JSON.stringify(diagnostics, null, 2) : 'Connect a keyboard to inspect its HID collections.'
@@ -212,6 +249,44 @@ ui.stopColor.addEventListener('click', () => {
   transport.stopLiveColor()
   ui.notice.textContent = 'Live preview stopped. The onboard hardware effect should resume automatically.'
   render()
+})
+ui.paintKeys.addEventListener('click', async () => {
+  if (selectedLeds.size === 0) {
+    ui.notice.textContent = 'Select one or more keys in the layout first.'
+    return
+  }
+  const hex = Number.parseInt(ui.liveColor.value.slice(1), 16)
+  const color = { red: (hex >> 16) & 0xff, green: (hex >> 8) & 0xff, blue: hex & 0xff }
+  for (const led of selectedLeds) keyColors.set(led, color)
+  for (const button of ui.keyGrid.querySelectorAll<HTMLButtonElement>('.keyboard-key')) {
+    const led = Number(button.dataset.led)
+    const assigned = keyColors.get(led)
+    button.style.setProperty('--key-color', assigned ? `rgb(${assigned.red} ${assigned.green} ${assigned.blue})` : 'transparent')
+    button.classList.toggle('painted', Boolean(assigned))
+  }
+  try {
+    await transport.setLiveKeyColors(keyColors)
+    ui.notice.textContent = `Per-key preview active with ${keyColors.size} colored key${keyColors.size === 1 ? '' : 's'}.`
+    render()
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The per-key preview failed.'
+  }
+})
+ui.clearKeys.addEventListener('click', async () => {
+  keyColors.clear()
+  selectedLeds.clear()
+  for (const button of ui.keyGrid.querySelectorAll<HTMLButtonElement>('.keyboard-key')) {
+    button.classList.remove('selected', 'painted')
+    button.setAttribute('aria-pressed', 'false')
+    button.style.removeProperty('--key-color')
+  }
+  try {
+    await transport.setLiveKeyColors(keyColors)
+    ui.notice.textContent = 'Custom colors cleared. Stop the preview to resume the onboard effect.'
+    render()
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'Custom colors could not be cleared.'
+  }
 })
 transport.addEventListener('transporterror', (event) => {
   ui.notice.textContent = `Keyboard communication stopped: ${(event as CustomEvent<string>).detail}`

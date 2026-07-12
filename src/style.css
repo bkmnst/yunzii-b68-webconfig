@@ -31,11 +31,19 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .secondary { border-color: #353b3a; background: transparent; color: var(--ink); }
 .notice { min-height: 1.5em; margin-top: 17px; color: var(--muted); font-size: .88rem; }
 .status-panel { border: 1px solid var(--line); background: linear-gradient(145deg, rgba(20,24,29,.96), rgba(12,15,18,.96)); box-shadow: 0 32px 80px rgba(0,0,0,.25); }
-.lighting-panel { display: flex; align-items: center; justify-content: space-between; gap: 30px; margin-top: 18px; padding: 28px 30px; border: 1px solid var(--line); background: #0c0f13; }
+.lighting-panel { margin-top: 18px; padding: 28px 30px; border: 1px solid var(--line); background: #0c0f13; }
+.lighting-heading { display: flex; align-items: center; justify-content: space-between; gap: 30px; }
 .lighting-panel h2 { margin: 6px 0 8px; }
 .lighting-panel p:not(.kicker) { max-width: 650px; margin: 0; color: var(--muted); font-size: .88rem; line-height: 1.55; }
 .color-control { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .color-control input { width: 52px; height: 46px; padding: 3px; border: 1px solid #353b3a; border-radius: 2px; background: transparent; cursor: pointer; }
+.color-control { flex-wrap: wrap; justify-content: flex-end; }
+.keyboard-grid { margin-top: 28px; overflow-x: auto; padding-bottom: 8px; }
+.keyboard-row { display: flex; min-width: 760px; gap: 5px; margin-bottom: 5px; }
+.keyboard-key { position: relative; flex: var(--key-width) 1 0; min-width: 38px; height: 42px; overflow: hidden; padding: 4px; border: 1px solid #303538; background: color-mix(in srgb, var(--key-color, transparent) 42%, #15191e); color: var(--ink); font: 600 .68rem ui-monospace, "Cascadia Code", monospace; }
+.keyboard-key::after { content: ''; position: absolute; inset: auto 5px 4px; height: 2px; background: var(--key-color, transparent); box-shadow: 0 0 8px var(--key-color, transparent); }
+.keyboard-key.selected { border-color: var(--acid); box-shadow: inset 0 0 0 1px rgba(200,255,67,.25); }
+.keyboard-key.painted { color: #fff; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px 30px; border-bottom: 1px solid var(--line); }
 .panel-heading h2 { margin: 5px 0 0; font-size: 1.35rem; }
 .kicker { margin: 0; color: var(--acid); }
@@ -68,7 +76,8 @@ footer { display: flex; justify-content: space-between; width: min(1180px, calc(
   .metrics article { min-height: 145px; border-right: 0; border-bottom: 1px solid var(--line); }
   .metrics article:last-child { border-bottom: 0; }
   .panel-heading, .diagnostic-actions { align-items: flex-start; flex-direction: column; }
-  .lighting-panel { align-items: flex-start; flex-direction: column; }
+  .lighting-heading { align-items: flex-start; flex-direction: column; }
+  .color-control { justify-content: flex-start; }
   .refresh-row { gap: 20px; }
   footer { width: calc(100% - 28px); gap: 20px; }
 }

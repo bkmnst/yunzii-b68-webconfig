@@ -83,3 +83,26 @@ export function buildLiveRgbPayload(color: RgbColor): Uint8Array<ArrayBuffer> {
   }
   return payload
 }
+
+export function buildPerKeyRgbPayload(
+  colors: ReadonlyMap<number, RgbColor>,
+  background: RgbColor = { red: 0, green: 0, blue: 0 },
+): Uint8Array<ArrayBuffer> {
+  assertColorChannel(background.red)
+  assertColorChannel(background.green)
+  assertColorChannel(background.blue)
+  const payload = buildLiveRgbPayload(background)
+  for (const [slot, color] of colors) {
+    if (!Number.isInteger(slot) || slot < 0 || slot >= B68_LED_SLOT_COUNT) {
+      throw new RangeError(`LED slot ${slot} is outside the B68 range.`)
+    }
+    assertColorChannel(color.red)
+    assertColorChannel(color.green)
+    assertColorChannel(color.blue)
+    const offset = LIVE_RGB_HEADER.length + slot * 3
+    payload[offset] = color.red
+    payload[offset + 1] = color.green
+    payload[offset + 2] = color.blue
+  }
+  return payload
+}

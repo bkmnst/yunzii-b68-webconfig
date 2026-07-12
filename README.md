@@ -17,6 +17,8 @@ The app performs a read-only `receiveFeatureReport(5)` request when that report 
 
 Live solid-color preview uses the B68's vendor feature report 6 (`0xFF00:0x0001`, 519-byte WebHID payload). It fills the 96 LED slots established by the B68 layout map and refreshes the direct-mode frame every 750 ms. Stopping the stream lets the keyboard return to its onboard effect; no onboard profile is written.
 
+The per-key editor uses all 67 B68 key/control entries and their sparse LED indices from the model configuration. Selected keys can be painted repeatedly into a live custom frame without writing onboard memory.
+
 ## Safety boundary
 
 Allowed behavior currently includes device selection, descriptor inspection, status reads, and the explicit live RGB preview command. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.

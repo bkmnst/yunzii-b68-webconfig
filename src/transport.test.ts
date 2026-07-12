@@ -157,6 +157,21 @@ describe('KeyboardTransport', () => {
     })
   })
 
+  it('sends a sparse per-key RGB frame through report 6', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.setLiveKeyColors(new Map([[95, { red: 7, green: 8, blue: 9 }]]))
+    const payload = vi.mocked(device.sendFeatureReport).mock.calls[0][1] as Uint8Array
+    expect([...payload.slice(7 + 95 * 3, 10 + 95 * 3)]).toEqual([7, 8, 9])
+    transport.stopLiveColor()
+  })
+
   it('cancels state on a device disconnect', async () => {
     const transport = new KeyboardTransport()
     await transport.connect(mockDevice())

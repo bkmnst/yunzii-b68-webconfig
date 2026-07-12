@@ -1,6 +1,7 @@
 import { allCollections, matchKnownDevice } from './devices'
 import {
   buildLiveRgbPayload,
+  buildPerKeyRgbPayload,
   LIVE_RGB_REPORT_ID,
   type RgbColor,
   unsupportedBattery,
@@ -22,7 +23,7 @@ export class KeyboardTransport extends EventTarget {
   #events: string[] = []
   #featureReads: DiagnosticSnapshot['featureReads'] = []
   #abortController: AbortController | null = null
-  #liveColor: RgbColor | null = null
+  #livePayload: Uint8Array<ArrayBuffer> | null = null
   #liveColorTimer: ReturnType<typeof setInterval> | null = null
 
   get device(): HIDDevice | null { return this.#device }
@@ -123,19 +124,16 @@ export class KeyboardTransport extends EventTarget {
   }
 
   async setLiveColor(color: RgbColor): Promise<void> {
-    if (!this.#device?.opened) throw new DOMException('Connect the keyboard first.', 'InvalidStateError')
-    const supportsLiveRgb = this.#collections.some((collection) =>
-      collection.featureReports.some((report) =>
-        report.reportId === LIVE_RGB_REPORT_ID && report.byteLength >= 519,
-      ),
-    )
-    if (!supportsLiveRgb) {
-      throw new DOMException('The connected interface does not expose the B68 live RGB report.', 'NotSupportedError')
-    }
-
+    this.#assertLiveRgbSupport()
     this.stopLiveColor()
-    this.#liveColor = { ...color }
+    this.#livePayload = buildLiveRgbPayload(color)
     await this.#sendLiveColorFrame()
+    this.#startLiveRgbKeepalive()
+    this.#record(`Live RGB preview started: ${color.red},${color.green},${color.blue}`)
+    this.dispatchEvent(new Event('statuschange'))
+  }
+
+  #startLiveRgbKeepalive(): void {
     this.#liveColorTimer = globalThis.setInterval(() => {
       void this.#sendLiveColorFrame().catch((error: unknown) => {
         const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
@@ -144,15 +142,23 @@ export class KeyboardTransport extends EventTarget {
         this.dispatchEvent(new CustomEvent('transporterror', { detail: message }))
       })
     }, 750)
-    this.#record(`Live RGB preview started: ${color.red},${color.green},${color.blue}`)
+  }
+
+  async setLiveKeyColors(colors: ReadonlyMap<number, RgbColor>): Promise<void> {
+    this.#assertLiveRgbSupport()
+    this.stopLiveColor()
+    this.#livePayload = buildPerKeyRgbPayload(colors)
+    await this.#sendLiveColorFrame()
+    this.#startLiveRgbKeepalive()
+    this.#record(`Per-key RGB preview started: ${colors.size} colored key(s)`)
     this.dispatchEvent(new Event('statuschange'))
   }
 
   stopLiveColor(): void {
     if (this.#liveColorTimer !== null) globalThis.clearInterval(this.#liveColorTimer)
-    const wasActive = this.#liveColorTimer !== null || this.#liveColor !== null
+    const wasActive = this.#liveColorTimer !== null || this.#livePayload !== null
     this.#liveColorTimer = null
-    this.#liveColor = null
+    this.#livePayload = null
     if (wasActive) {
       this.#record('Live RGB preview stopped; waiting for onboard effect to resume')
       this.dispatchEvent(new Event('statuschange'))
@@ -195,9 +201,21 @@ export class KeyboardTransport extends EventTarget {
   }
 
   async #sendLiveColorFrame(): Promise<void> {
-    if (!this.#device?.opened || !this.#liveColor) {
+    if (!this.#device?.opened || !this.#livePayload) {
       throw new DOMException('The live RGB device is disconnected.', 'InvalidStateError')
     }
-    await this.#device.sendFeatureReport(LIVE_RGB_REPORT_ID, buildLiveRgbPayload(this.#liveColor))
+    await this.#device.sendFeatureReport(LIVE_RGB_REPORT_ID, this.#livePayload)
+  }
+
+  #assertLiveRgbSupport(): void {
+    if (!this.#device?.opened) throw new DOMException('Connect the keyboard first.', 'InvalidStateError')
+    const supportsLiveRgb = this.#collections.some((collection) =>
+      collection.featureReports.some((report) =>
+        report.reportId === LIVE_RGB_REPORT_ID && report.byteLength >= 519,
+      ),
+    )
+    if (!supportsLiveRgb) {
+      throw new DOMException('The connected interface does not expose the B68 live RGB report.', 'NotSupportedError')
+    }
   }
 }
