@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeMacroArchive, decodeMacroAssignment, encodeMacroArchive, encodeMacroAssignment, MACRO_MAX_COUNT } from './macro'
+import { buildSetMacroPages, decodeMacroArchive, decodeMacroAssignment, encodeMacroArchive, encodeMacroAssignment, MACRO_MAX_COUNT } from './macro'
 
 describe('macro archive codec', () => {
   it('encodes the descriptor table, UTF-16LE names, and four-byte events', () => {
@@ -38,5 +38,20 @@ describe('macro archive codec', () => {
     expect(decodeMacroAssignment(encodeMacroAssignment(99, 'until-any-key'))).toEqual({ index: 99, mode: 'until-any-key', repeatCount: 1 })
     expect(() => encodeMacroAssignment(100, 'count')).toThrow('index')
     expect(() => decodeMacroAssignment(Uint8Array.of(3, 4, 2, 0))).toThrow('playback')
+  })
+
+  it('builds exact 512-byte ComboFilm macro pages with a bounded final length', () => {
+    const macros = [{ name: 'Long', events: Array.from({ length: 90 }, (_, index) => ({
+      type: 1 as const, delayMs: index, value: 4 + (index % 26), released: index % 2 === 1,
+    })) }]
+    const archive = encodeMacroArchive(macros)
+    const pages = buildSetMacroPages(macros)
+    expect(pages).toHaveLength(Math.ceil(archive.length / 512))
+    pages.forEach((page, index) => {
+      const expectedLength = Math.min(512, archive.length - index * 512)
+      expect(page).toHaveLength(519)
+      expect([...page.slice(0, 7)]).toEqual([5, index, 0, 6, 0, expectedLength & 0xff, expectedLength >>> 8])
+      expect([...page.slice(7, 7 + expectedLength)]).toEqual([...archive.slice(index * 512, index * 512 + expectedLength)])
+    })
   })
 })

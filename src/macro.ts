@@ -1,6 +1,9 @@
 export const MACRO_MAX_COUNT = 100
 export const MACRO_DATA_CAPACITY = 0x2000
 export const MACRO_TRANSFER_CAPACITY = 0x2800
+export const MACRO_PAGE_SIZE = 0x200
+export const MACRO_PAGE_COUNT = MACRO_TRANSFER_CAPACITY / MACRO_PAGE_SIZE
+export const MACRO_WIRE_PAYLOAD_LENGTH = 519
 export const MACRO_MAX_DELAY_MS = 0xfffff
 
 export type MacroEventType = 1 | 2 | 3 | 4 | 5
@@ -104,6 +107,22 @@ export function encodeMacroArchive(macros: readonly HardwareMacro[]): Uint8Array
     offset += record.length
   })
   return result
+}
+
+/** Builds the B68 ComboFilm SetMacro (0x05) pages without exposing a raw packet API. */
+export function buildSetMacroPages(macros: readonly HardwareMacro[]): readonly Uint8Array<ArrayBuffer>[] {
+  const archive = encodeMacroArchive(macros)
+  if (archive.length === 0) return []
+  const pageCount = Math.ceil(archive.length / MACRO_PAGE_SIZE)
+  if (pageCount > MACRO_PAGE_COUNT) throw new RangeError('Macro archive requires too many hardware pages.')
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const offset = pageIndex * MACRO_PAGE_SIZE
+    const chunk = archive.slice(offset, offset + MACRO_PAGE_SIZE)
+    const payload = new Uint8Array(new ArrayBuffer(MACRO_WIRE_PAYLOAD_LENGTH))
+    payload.set([0x05, pageIndex, 0, 0x06, 0, chunk.length & 0xff, chunk.length >>> 8])
+    payload.set(chunk, 7)
+    return payload
+  })
 }
 
 /** Decodes an archive when its macro count is known from the layer matrix assignments. */
