@@ -249,6 +249,7 @@ export class KeyboardTransport extends EventTarget {
   diagnostics(): DiagnosticSnapshot | null {
     if (!this.#device || !this.#knownDevice) return null
     return {
+      appBuild: __BUILD_ID__,
       generatedAt: new Date().toISOString(),
       device: {
         connectionType: this.#knownDevice.connectionType,

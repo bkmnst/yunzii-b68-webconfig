@@ -100,7 +100,7 @@ app.innerHTML = `
       <pre id="diagnostic-output">Connect a keyboard to inspect its HID collections.</pre>
     </details>
   </main>
-  <footer><span>Yunzii B68 Web Configurator</span><span>Open, local, cautious.</span></footer>
+  <footer><span>Yunzii B68 Web Configurator · build ${__BUILD_ID__}</span><span>Open, local, cautious.</span></footer>
 `
 
 const ui = {

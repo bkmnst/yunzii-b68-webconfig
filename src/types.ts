@@ -42,6 +42,7 @@ export interface DeviceStatus {
 }
 
 export interface DiagnosticSnapshot {
+  appBuild: string
   generatedAt: string
   device: {
     connectionType: ConnectionType
