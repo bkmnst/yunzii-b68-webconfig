@@ -12,6 +12,7 @@ export const B68_LED_SLOT_COUNT = 96
 export const LIVE_RGB_REPORT_ID = 6
 export const LIVE_RGB_PAYLOAD_LENGTH = 519
 const LIVE_RGB_HEADER = [0x08, 0x00, 0x00, 0x01, 0x00, 0x7a, 0x01] as const
+const IDENTITY_QUERY = [0x82, 0x01, 0x00, 0x01, 0x00, 0x06] as const
 
 /**
  * No command is shipped until its wire format has been independently confirmed.
@@ -105,4 +106,15 @@ export function buildPerKeyRgbPayload(
     payload[offset + 2] = color.blue
   }
   return payload
+}
+
+export function buildIdentityQueryPayload(): Uint8Array<ArrayBuffer> {
+  const payload = new Uint8Array(new ArrayBuffer(LIVE_RGB_PAYLOAD_LENGTH))
+  payload.set(IDENTITY_QUERY)
+  return payload
+}
+
+export function parseModelId(response: DataView): number {
+  if (response.byteLength <= 12) throw new RangeError('Identity response is too short to contain a model ID.')
+  return response.getUint8(12)
 }

@@ -1,9 +1,11 @@
 import { allCollections, matchKnownDevice } from './devices'
 import {
   buildLiveRgbPayload,
+  buildIdentityQueryPayload,
   buildPerKeyRgbPayload,
   LIVE_RGB_REPORT_ID,
   type RgbColor,
+  parseModelId,
   unsupportedBattery,
   unsupportedFirmware,
 } from './protocol'
@@ -90,29 +92,50 @@ export class KeyboardTransport extends EventTarget {
     const supportsReport5 = this.#collections.some((collection) =>
       collection.featureReports.some((report) => report.reportId === 5),
     )
-    if (!supportsReport5) return unsupportedFirmware()
+    if (supportsReport5) await this.#readDiagnosticFeatureReport(5)
+
+    const supportsReport6 = this.#collections.some((collection) =>
+      collection.featureReports.some((report) => report.reportId === 6 && report.byteLength >= 519),
+    )
+    if (!supportsReport6) {
+      const report5 = this.#featureReads.find((read) => read.reportId === 5)
+      if (report5?.result === 'ok') {
+        return {
+          state: 'invalid-response',
+          message: 'Feature report 5 was read successfully; its firmware encoding is not decoded yet.',
+          raw: report5.bytes ?? [],
+        }
+      }
+      if (report5?.result === 'error') {
+        return { state: 'invalid-response', message: `Feature report 5 failed: ${report5.message}`, raw: [] }
+      }
+      return unsupportedFirmware()
+    }
 
     try {
-      const view = await this.#device.receiveFeatureReport(5)
+      await this.#device.sendFeatureReport(6, buildIdentityQueryPayload())
+      const view = await this.#device.receiveFeatureReport(6)
       const bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
+      const modelId = parseModelId(view)
+      const modelHex = `0x${modelId.toString(16).padStart(2, '0').toUpperCase()}`
       this.#featureReads = [
-        ...this.#featureReads.filter((read) => read.reportId !== 5),
-        { reportId: 5, result: 'ok', bytes },
+        ...this.#featureReads.filter((read) => read.reportId !== 6),
+        { reportId: 6, result: 'ok', bytes, message: `Identity response; model ID ${modelHex}` },
       ]
-      this.#record(`Feature report 5 read: ${bytes.length} byte(s)`)
+      this.#record(`Identity report read: model ${modelHex}; ${bytes.length} byte(s)`)
       return {
         state: 'invalid-response',
-        message: 'Feature report 5 was read successfully; its firmware encoding is not decoded yet.',
+        message: `Model ID ${modelHex} identified; firmware encoding is being decoded.`,
         raw: bytes,
       }
     } catch (error) {
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       this.#featureReads = [
-        ...this.#featureReads.filter((read) => read.reportId !== 5),
-        { reportId: 5, result: 'error', message },
+        ...this.#featureReads.filter((read) => read.reportId !== 6),
+        { reportId: 6, result: 'error', message },
       ]
-      this.#record(`Feature report 5 failed: ${message}`)
-      return { state: 'invalid-response', message: `Feature report 5 failed: ${message}`, raw: [] }
+      this.#record(`Identity report failed: ${message}`)
+      return { state: 'invalid-response', message: `Identity query failed: ${message}`, raw: [] }
     }
   }
 
@@ -198,6 +221,26 @@ export class KeyboardTransport extends EventTarget {
   #record(message: string): void {
     this.#events.push(`${new Date().toISOString()} ${message}`)
     if (this.#events.length > 100) this.#events.shift()
+  }
+
+  async #readDiagnosticFeatureReport(reportId: number): Promise<void> {
+    if (!this.#device?.opened) return
+    try {
+      const view = await this.#device.receiveFeatureReport(reportId)
+      const bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
+      this.#featureReads = [
+        ...this.#featureReads.filter((read) => read.reportId !== reportId),
+        { reportId, result: 'ok', bytes },
+      ]
+      this.#record(`Feature report ${reportId} read: ${bytes.length} byte(s)`)
+    } catch (error) {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      this.#featureReads = [
+        ...this.#featureReads.filter((read) => read.reportId !== reportId),
+        { reportId, result: 'error', message },
+      ]
+      this.#record(`Feature report ${reportId} failed: ${message}`)
+    }
   }
 
   async #sendLiveColorFrame(): Promise<void> {

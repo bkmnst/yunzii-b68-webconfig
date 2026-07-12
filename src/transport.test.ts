@@ -102,6 +102,28 @@ describe('KeyboardTransport', () => {
     expect(transport.diagnostics()?.featureReads[0]).toMatchObject({ reportId: 5, result: 'error' })
   })
 
+  it('queries and records the report-6 model identity', async () => {
+    const response = new Uint8Array(519)
+    response[12] = 0xab
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn(async () => new DataView(response.buffer)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    const result = await transport.queryFirmware()
+    expect(device.sendFeatureReport).toHaveBeenCalledWith(6, expect.any(Uint8Array))
+    expect(result).toMatchObject({ state: 'invalid-response', message: expect.stringContaining('0xAB') })
+    expect(transport.diagnostics()?.featureReads[0]).toMatchObject({
+      reportId: 6,
+      result: 'ok',
+      message: expect.stringContaining('0xAB'),
+    })
+  })
+
   it('sends only the semantic live RGB feature report', async () => {
     const device = mockDevice({
       collections: [{
