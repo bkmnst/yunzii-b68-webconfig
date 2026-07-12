@@ -122,6 +122,7 @@ app.innerHTML = `
       <div class="profile-controls macro-controls">
         <button id="read-macros" class="secondary" disabled>Read macros</button>
         <label>Stored / staged <select id="macro-list"><option value="">No macros</option></select></label>
+        <button id="edit-macro" class="secondary" disabled>Edit selected</button>
         <button id="delete-macro" class="secondary" disabled>Delete selected</button>
         <label>Name <input id="macro-name" maxlength="127" /></label>
         <label>Key <select id="macro-key"></select></label>
@@ -130,6 +131,7 @@ app.innerHTML = `
         <button id="add-macro-event" class="secondary">Add event</button>
         <button id="clear-macro-events" class="secondary" disabled>Clear events</button>
         <button id="save-macro" class="secondary" disabled>Add macro to archive</button>
+        <button id="cancel-macro-edit" class="secondary" hidden>Cancel edit</button>
         <button id="apply-macros" class="primary" disabled>Apply archive and verify</button>
       </div>
       <ol id="macro-events" class="macro-events"><li>No draft events.</li></ol>
@@ -222,6 +224,7 @@ const ui = {
   remapSummary: document.querySelector<HTMLElement>('#remap-summary')!,
   readMacros: document.querySelector<HTMLButtonElement>('#read-macros')!,
   macroList: document.querySelector<HTMLSelectElement>('#macro-list')!,
+  editMacro: document.querySelector<HTMLButtonElement>('#edit-macro')!,
   deleteMacro: document.querySelector<HTMLButtonElement>('#delete-macro')!,
   macroName: document.querySelector<HTMLInputElement>('#macro-name')!,
   macroKey: document.querySelector<HTMLSelectElement>('#macro-key')!,
@@ -230,6 +233,7 @@ const ui = {
   addMacroEvent: document.querySelector<HTMLButtonElement>('#add-macro-event')!,
   clearMacroEvents: document.querySelector<HTMLButtonElement>('#clear-macro-events')!,
   saveMacro: document.querySelector<HTMLButtonElement>('#save-macro')!,
+  cancelMacroEdit: document.querySelector<HTMLButtonElement>('#cancel-macro-edit')!,
   applyMacros: document.querySelector<HTMLButtonElement>('#apply-macros')!,
   macroEvents: document.querySelector<HTMLOListElement>('#macro-events')!,
   macroSummary: document.querySelector<HTMLElement>('#macro-summary')!,
@@ -269,6 +273,7 @@ let lightingProfiles: LightingProfile[] = loadStoredProfiles(localStorage)
 let stagedMatrix: B68MatrixLayer | null = null
 let macroDrafts: HardwareMacro[] | null = null
 let macroDraftEvents: HardwareMacroEvent[] = []
+let editingMacroIndex: number | null = null
 
 for (const effect of B68_LIGHTING_EFFECTS) ui.onboardEffectSetting.add(new Option(effect.name, String(effect.hardwareId)))
 
@@ -294,17 +299,46 @@ function renderSpecialAssignmentOptions(): void {
 
 function renderMacroEditor(): void {
   ui.macroEvents.replaceChildren(...(macroDraftEvents.length > 0
-    ? macroDraftEvents.map((event) => {
+    ? macroDraftEvents.map((event, index) => {
       const item = document.createElement('li')
       const key = KEYBOARD_USAGE_OPTIONS.find((option) => option.usage === event.value)?.label ?? `0x${event.value.toString(16)}`
-      item.textContent = `${event.delayMs} ms · ${event.released ? 'Release' : 'Press'} ${key}`
+      const text = document.createElement('span')
+      text.textContent = `${event.delayMs} ms · ${event.released ? 'Release' : 'Press'} ${key}`
+      const up = Object.assign(document.createElement('button'), { type: 'button', textContent: '↑', disabled: index === 0, title: 'Move event earlier' })
+      const down = Object.assign(document.createElement('button'), { type: 'button', textContent: '↓', disabled: index === macroDraftEvents.length - 1, title: 'Move event later' })
+      const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Remove', title: 'Remove event' })
+      up.addEventListener('click', () => {
+        if (index === 0) return
+        const events = [...macroDraftEvents]
+        ;[events[index - 1], events[index]] = [events[index], events[index - 1]]
+        macroDraftEvents = events
+        renderMacroEditor()
+      })
+      down.addEventListener('click', () => {
+        if (index >= macroDraftEvents.length - 1) return
+        const events = [...macroDraftEvents]
+        ;[events[index], events[index + 1]] = [events[index + 1], events[index]]
+        macroDraftEvents = events
+        renderMacroEditor()
+      })
+      remove.addEventListener('click', () => {
+        macroDraftEvents = macroDraftEvents.filter((_, eventIndex) => eventIndex !== index)
+        renderMacroEditor()
+      })
+      const actions = document.createElement('span')
+      actions.className = 'macro-event-actions'
+      actions.append(up, down, remove)
+      item.append(text, actions)
       return item
     })
     : [Object.assign(document.createElement('li'), { textContent: 'No draft events.' })]))
   ui.clearMacroEvents.disabled = macroDraftEvents.length === 0
   ui.saveMacro.disabled = macroDrafts === null || macroDraftEvents.length === 0 || ui.macroName.value.trim().length === 0
+  ui.saveMacro.textContent = editingMacroIndex === null ? 'Add macro to archive' : 'Replace macro in archive'
+  ui.cancelMacroEdit.hidden = editingMacroIndex === null
   ui.macroList.replaceChildren(new Option(macroDrafts?.length ? 'Select macro' : 'No macros', ''))
   macroDrafts?.forEach((macro, index) => ui.macroList.add(new Option(`${index + 1}. ${macro.name}`, String(index))))
+  ui.editMacro.disabled = !ui.macroList.value
   ui.deleteMacro.disabled = !ui.macroList.value
   ui.applyMacros.disabled = macroDrafts === null || macroDrafts.length === 0
   ui.remapMacro.replaceChildren(...(transport.macros ?? []).map((macro, index) => new Option(`${index + 1}. ${macro.name}`, String(index))))
@@ -621,6 +655,8 @@ ui.readMacros.addEventListener('click', async () => {
   ui.notice.textContent = 'Reading and validating the device macro archive…'
   await transport.inspectMacros()
   macroDrafts = transport.macros?.map((macro) => ({ ...macro, events: macro.events.map((event) => ({ ...event })) })) ?? null
+  editingMacroIndex = null
+  macroDraftEvents = []
   ui.macroSummary.textContent = macroDrafts ? `${macroDrafts.length} macro${macroDrafts.length === 1 ? '' : 's'} loaded from the keyboard.` : 'Macro archive validation failed.'
   renderMacroEditor()
   render()
@@ -645,16 +681,44 @@ ui.saveMacro.addEventListener('click', () => {
   if (macroDrafts === null || macroDraftEvents.length === 0) return
   const name = ui.macroName.value.trim()
   if (!name) return
-  macroDrafts = [...macroDrafts, { name, events: macroDraftEvents.map((event) => ({ ...event })) }]
+  const saved = { name, events: macroDraftEvents.map((event) => ({ ...event })) }
+  if (editingMacroIndex === null) macroDrafts = [...macroDrafts, saved]
+  else macroDrafts = macroDrafts.map((macro, index) => index === editingMacroIndex ? saved : macro)
   macroDraftEvents = []
+  editingMacroIndex = null
   ui.macroName.value = ''
   ui.macroSummary.textContent = `${macroDrafts.length} macro${macroDrafts.length === 1 ? '' : 's'} staged; apply to write and verify.`
   renderMacroEditor()
 })
-ui.macroList.addEventListener('change', () => { ui.deleteMacro.disabled = !ui.macroList.value })
+ui.macroList.addEventListener('change', () => {
+  const selected = ui.macroList.value !== ''
+  ui.editMacro.disabled = !selected
+  ui.deleteMacro.disabled = !selected
+})
+ui.editMacro.addEventListener('click', () => {
+  if (macroDrafts === null || ui.macroList.value === '') return
+  const index = Number(ui.macroList.value)
+  const macro = macroDrafts[index]
+  if (!macro) return
+  editingMacroIndex = index
+  ui.macroName.value = macro.name
+  macroDraftEvents = macro.events.map((event) => ({ ...event }))
+  ui.macroSummary.textContent = `Editing macro ${index + 1}; changes remain staged until archive apply.`
+  renderMacroEditor()
+})
+ui.cancelMacroEdit.addEventListener('click', () => {
+  editingMacroIndex = null
+  macroDraftEvents = []
+  ui.macroName.value = ''
+  ui.macroSummary.textContent = 'Macro edit cancelled; the staged archive is unchanged.'
+  renderMacroEditor()
+})
 ui.deleteMacro.addEventListener('click', () => {
   if (macroDrafts === null || ui.macroList.value === '') return
   macroDrafts = macroDrafts.filter((_, index) => index !== Number(ui.macroList.value))
+  editingMacroIndex = null
+  macroDraftEvents = []
+  ui.macroName.value = ''
   ui.macroSummary.textContent = macroDrafts.length === 0
     ? 'The final macro cannot be cleared on-device until a clearing packet is confirmed.'
     : `${macroDrafts.length} macro${macroDrafts.length === 1 ? '' : 's'} staged.`

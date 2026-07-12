@@ -58,6 +58,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .macro-controls label { display: grid; gap: 6px; color: var(--muted); font-size: .8rem; }
 .macro-controls input { min-height: 44px; padding: 0 10px; border: 1px solid #353b3a; background: #11151a; color: var(--ink); }
 .macro-events { margin: 18px 0 12px; padding-left: 24px; color: #b8beb8; font: .8rem/1.7 ui-monospace, "Cascadia Code", monospace; }
+.macro-events li { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 7px 0; }
+.macro-event-actions { display: inline-flex; gap: 6px; }
+.macro-event-actions button { min-width: 32px; padding: 5px 8px; border: 1px solid var(--line); background: #15191e; color: var(--ink); }
 .file-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 19px; cursor: pointer; }
 .file-button input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px 30px; border-bottom: 1px solid var(--line); }
