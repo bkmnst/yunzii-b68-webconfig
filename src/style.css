@@ -49,6 +49,10 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .keyboard-key.painted { color: #fff; }
 .profile-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 .profile-controls select { min-width: 190px; height: 44px; padding: 0 12px; border: 1px solid #353b3a; border-radius: 2px; color: var(--ink); background: #11151a; font: inherit; }
+.remap-controls label { display: grid; gap: 6px; color: var(--muted); font-size: .8rem; }
+.remap-controls fieldset { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); padding: 8px 12px; }
+.remap-controls fieldset label { display: inline-flex; align-items: center; gap: 3px; }
+.remap-controls legend { color: var(--muted); padding: 0 4px; font-size: .75rem; }
 .file-button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 19px; cursor: pointer; }
 .file-button input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px 30px; border-bottom: 1px solid var(--line); }

@@ -51,6 +51,9 @@ export function encodeKeyboardAssignment(modifiers: number, usage: number): Matr
   return { bytes: [0, modifiers, 0, usage] }
 }
 
+export function encodeDisabledAssignment(): MatrixAssignment { return { bytes: [0, 0, 0, 0] } }
+export function encodeFnAssignment(): MatrixAssignment { return { bytes: [0x0d, 0, 0, 0] } }
+
 export function replaceMatrixAssignment(
   matrix: B68MatrixLayer,
   index: number,

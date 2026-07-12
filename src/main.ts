@@ -1,8 +1,17 @@
 import './style.css'
 import { assignmentLabel } from './assignment-label'
 import { DEVICE_FILTERS, matchKnownDevice, preferWired } from './devices'
-import { B68_KEY_ROWS } from './layout'
-import { B68_LAYERS, type B68Layer } from './matrix'
+import { KEYBOARD_USAGE_OPTIONS, MODIFIER_OPTIONS } from './keycodes'
+import { B68_KEYS, B68_KEY_ROWS } from './layout'
+import {
+  B68_LAYERS,
+  encodeDisabledAssignment,
+  encodeFnAssignment,
+  encodeKeyboardAssignment,
+  replaceMatrixAssignment,
+  type B68Layer,
+  type B68MatrixLayer,
+} from './matrix'
 import {
   createLightingProfile,
   loadStoredProfiles,
@@ -23,7 +32,7 @@ app.innerHTML = `
     <header class="hero">
       <div class="eyebrow"><span class="signal"></span> Local WebHID tool</div>
       <h1>Your B68,<br><em>without the driver.</em></h1>
-      <p class="lede">Inspect firmware and battery status directly in your browser. Nothing is installed, uploaded, or changed on your keyboard.</p>
+      <p class="lede">Inspect and configure your keyboard directly in the browser. Nothing is installed or uploaded, and device changes happen only when you explicitly apply them.</p>
       <div class="actions">
         <button id="connect" class="primary">Connect configuration interface</button>
         <button id="disconnect" class="secondary" hidden>Disconnect</button>
@@ -70,6 +79,24 @@ app.innerHTML = `
         <button id="refresh" class="text-button" disabled>Refresh status</button>
         <button id="read-usb-firmware" class="text-button" disabled>Read USB firmware</button>
         <span id="last-refresh">Not refreshed</span>
+      </div>
+    </section>
+
+    <section class="lighting-panel" aria-labelledby="remap-title">
+      <div class="lighting-heading">
+        <div><p class="kicker">Key assignment</p><h2 id="remap-title">Remap a key</h2>
+        <p>Read a complete layer first. Applying a staged assignment writes only that typed layer and verifies all 512 bytes immediately.</p></div>
+      </div>
+      <div class="profile-controls remap-controls">
+        <label>Layer <select id="remap-layer"></select></label>
+        <button id="read-remap-layer" class="secondary" disabled>Read layer</button>
+        <label>Physical key <select id="remap-key"></select></label>
+        <label>Assignment <select id="remap-kind"><option value="keyboard">Keyboard key / combo</option><option value="disabled">Disable</option><option value="fn">Fn</option></select></label>
+        <label>Key <select id="remap-usage"></select></label>
+        <fieldset id="remap-modifiers"><legend>Modifiers</legend></fieldset>
+        <button id="stage-remap" class="secondary" disabled>Stage assignment</button>
+        <button id="apply-remap" class="primary" disabled>Apply and verify</button>
+        <span id="remap-summary">Read a layer to begin.</span>
       </div>
     </section>
 
@@ -131,6 +158,15 @@ const ui = {
   readUsbFirmware: document.querySelector<HTMLButtonElement>('#read-usb-firmware')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
+  remapLayer: document.querySelector<HTMLSelectElement>('#remap-layer')!,
+  readRemapLayer: document.querySelector<HTMLButtonElement>('#read-remap-layer')!,
+  remapKey: document.querySelector<HTMLSelectElement>('#remap-key')!,
+  remapKind: document.querySelector<HTMLSelectElement>('#remap-kind')!,
+  remapUsage: document.querySelector<HTMLSelectElement>('#remap-usage')!,
+  remapModifiers: document.querySelector<HTMLFieldSetElement>('#remap-modifiers')!,
+  stageRemap: document.querySelector<HTMLButtonElement>('#stage-remap')!,
+  applyRemap: document.querySelector<HTMLButtonElement>('#apply-remap')!,
+  remapSummary: document.querySelector<HTMLElement>('#remap-summary')!,
   matrixLayer: document.querySelector<HTMLSelectElement>('#matrix-layer')!,
   applyColor: document.querySelector<HTMLButtonElement>('#apply-color')!,
   liveColor: document.querySelector<HTMLInputElement>('#live-color')!,
@@ -164,6 +200,19 @@ const ui = {
 const selectedLeds = new Set<number>()
 const keyColors = new Map<number, { red: number; green: number; blue: number }>()
 let lightingProfiles: LightingProfile[] = loadStoredProfiles(localStorage)
+let stagedMatrix: B68MatrixLayer | null = null
+
+for (const layer of B68_LAYERS) ui.remapLayer.add(new Option(layer.toUpperCase(), layer))
+for (const key of B68_KEYS) ui.remapKey.add(new Option(key.label, String(key.ledIndex)))
+for (const key of KEYBOARD_USAGE_OPTIONS) ui.remapUsage.add(new Option(key.label, String(key.usage)))
+for (const modifier of MODIFIER_OPTIONS) {
+  const label = document.createElement('label')
+  const input = document.createElement('input')
+  input.type = 'checkbox'
+  input.value = String(modifier.mask)
+  label.append(input, ` ${modifier.label}`)
+  ui.remapModifiers.append(label)
+}
 
 for (const row of B68_KEY_ROWS) {
   const rowElement = document.createElement('div')
@@ -262,6 +311,9 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.readUsbFirmware.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired' || !navigator.usb
   ui.copy.disabled = !status.connected
   ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
+  ui.readRemapLayer.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
+  ui.stageRemap.disabled = !transport.matrix(ui.remapLayer.value as B68Layer)
+  ui.applyRemap.disabled = !stagedMatrix
   ui.applyColor.disabled = !status.connected
   ui.stopColor.disabled = !status.connected || !transport.livePreviewActive
   ui.paintKeys.disabled = !status.connected
@@ -354,6 +406,57 @@ ui.inspectMatrix.addEventListener('click', async () => {
   renderKeymap(layer)
   render()
   ui.notice.textContent = `${layer.toUpperCase()} keymap diagnostic complete. Copy the report to share the validated result.`
+})
+ui.remapLayer.addEventListener('change', () => {
+  stagedMatrix = null
+  renderKeymap(ui.remapLayer.value as B68Layer)
+  ui.remapSummary.textContent = transport.matrix(ui.remapLayer.value as B68Layer) ? 'Layer is validated; choose an assignment.' : 'Read this layer to begin.'
+  render()
+})
+ui.remapKind.addEventListener('change', () => {
+  const keyboard = ui.remapKind.value === 'keyboard'
+  ui.remapUsage.disabled = !keyboard
+  ui.remapModifiers.disabled = !keyboard
+})
+ui.readRemapLayer.addEventListener('click', async () => {
+  const layer = ui.remapLayer.value as B68Layer
+  stagedMatrix = null
+  ui.readRemapLayer.disabled = true
+  ui.notice.textContent = `Reading the complete ${layer.toUpperCase()} layer before editing…`
+  await transport.inspectMatrix(layer)
+  renderKeymap(layer)
+  ui.remapSummary.textContent = transport.matrix(layer) ? 'Layer validated; choose a key and assignment.' : 'Layer validation failed; no write is available.'
+  render()
+})
+ui.stageRemap.addEventListener('click', () => {
+  const layer = ui.remapLayer.value as B68Layer
+  const baseline = transport.matrix(layer)
+  if (!baseline) return
+  const index = Number(ui.remapKey.value)
+  const assignment = ui.remapKind.value === 'disabled' ? encodeDisabledAssignment()
+    : ui.remapKind.value === 'fn' ? encodeFnAssignment()
+    : encodeKeyboardAssignment(
+      [...ui.remapModifiers.querySelectorAll<HTMLInputElement>('input:checked')].reduce((mask, input) => mask | Number(input.value), 0),
+      Number(ui.remapUsage.value),
+    )
+  stagedMatrix = replaceMatrixAssignment(baseline, index, assignment)
+  ui.remapSummary.textContent = `${B68_KEYS.find((key) => key.ledIndex === index)?.label ?? `Slot ${index}`} → ${assignmentLabel(assignment)} (staged)`
+  render()
+})
+ui.applyRemap.addEventListener('click', async () => {
+  if (!stagedMatrix) return
+  ui.applyRemap.disabled = true
+  ui.notice.textContent = 'Applying the typed key assignment and verifying exact hardware readback…'
+  try {
+    await transport.applyMatrixLayer(stagedMatrix)
+    renderKeymap(stagedMatrix.layer)
+    ui.remapSummary.textContent = 'Assignment applied and verified.'
+    ui.notice.textContent = 'Key assignment applied; the complete 512-byte readback matched.'
+    stagedMatrix = null
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The key assignment was not verified.'
+  }
+  render()
 })
 ui.applyColor.addEventListener('click', async () => {
   const hex = ui.liveColor.value.slice(1)

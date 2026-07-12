@@ -1,6 +1,6 @@
 # Yunzii B68 Web Configurator
 
-A cautious, browser-based status tool for the Yunzii B68 keyboard. It targets desktop Chromium browsers through [WebHID](https://developer.mozilla.org/docs/Web/API/WebHID_API) and is designed for static hosting on GitHub Pages.
+A local-first browser configurator for the Yunzii B68 keyboard. It targets desktop Chromium browsers through WebHID and WebUSB and is designed for static hosting on GitHub Pages.
 
 ## Current status
 
@@ -15,7 +15,7 @@ The WebHID picker requires vendor usage page `0xFF00`, preventing Chromium from 
 
 The app performs a read-only `receiveFeatureReport(5)` request when that report is exposed, preserving its raw response or browser error in Advanced diagnostics. Its firmware encoding is not presented as a value until independently confirmed. No arbitrary packet-sending surface is exposed.
 
-Device identification uses the Sinowealth `0x010C` report-6 query (`82 01 00 01 00 06`), then reads report 6 and extracts the model ID from WebHID response byte 12. The complete response remains visible in diagnostics while firmware fields are decoded.
+Device identification uses the Sinowealth `0x010C` report-6 query (`82 01 00 01 00 06`), then reads report 6 and extracts the model ID from WebHID response byte 12. Wired firmware is read separately from the USB `bcdDevice` descriptor after an explicit user gesture; no USB interface is opened or claimed.
 
 Live solid-color preview uses the B68's vendor feature report 6 (`0xFF00:0x0001`, 519-byte WebHID payload). It fills the 96 LED slots established by the B68 layout map and refreshes the direct-mode frame every 750 ms. Stopping the stream lets the keyboard return to its onboard effect; no onboard profile is written.
 
@@ -23,9 +23,11 @@ The per-key editor uses all 67 B68 key/control entries and their sparse LED indi
 
 Lighting profiles can be saved locally, loaded into the live preview, deleted, and imported/exported as validated versioned JSON. These browser-local profiles do not claim to be onboard profiles; device persistence remains a separate protocol feature.
 
+All four 512-byte keymap layers can be read and decoded. The semantic remapping editor supports standard keyboard keys, Ctrl/Shift/Alt/Win combinations, disabling a key, and assigning Fn. A persistent keymap change is available only after a complete CRC-valid baseline read, preserves reserved hardware entries, and is accepted only when an immediate full readback matches exactly.
+
 ## Safety boundary
 
-Allowed behavior currently includes device selection, descriptor inspection, status reads, and the explicit live RGB preview command. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.
+Allowed behavior currently includes device selection, descriptor inspection, validated status/keymap reads, explicit live RGB preview, and typed keymap changes with exact readback. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.
 
 No device data is uploaded. Diagnostic reports exist only in memory and can be copied manually.
 Up to 50 recent HID input reports are retained in memory with at most 64 bytes each, so wired and dongle status events can be compared without an extension or persistent traffic log.
