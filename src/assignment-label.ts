@@ -1,5 +1,6 @@
 import { decodeSemanticAssignment, type MatrixAssignment } from './matrix'
 import { KEYBOARD_USAGE_OPTIONS } from './keycodes'
+import { directAssignmentLabel } from './direct-assignments'
 
 const HID_USAGE_NAMES: ReadonlyMap<number, string> = new Map(
   KEYBOARD_USAGE_OPTIONS.map(({ usage, label }) => [usage, label]),
@@ -49,6 +50,8 @@ export function assignmentLabel(assignment: MatrixAssignment): string {
       return [modifier, key].filter(Boolean).join(' + ')
     }
     case 'fn': return 'Fn'
+    case 'mouse-command': return directAssignmentLabel(0x01, semantic.command) ?? `Mouse command 0x${semantic.command.toString(16).padStart(2, '0').toUpperCase()}`
+    case 'multimedia-command': return directAssignmentLabel(0x04, semantic.command) ?? `Multimedia command 0x${semantic.command.toString(16).padStart(2, '0').toUpperCase()}`
     case 'device-command': return B68_DEVICE_COMMANDS[semantic.command] ?? `Device command 0x${semantic.command.toString(16).padStart(2, '0').toUpperCase()}`
     case 'lighting-command': return B68_LIGHTING_COMMANDS[`${semantic.group},${semantic.value},${semantic.parameter}`]
       ?? `Lighting command ${semantic.group}:${semantic.value}:${semantic.parameter}`

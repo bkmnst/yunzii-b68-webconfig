@@ -25,7 +25,7 @@ The per-key editor uses all 67 B68 key/control entries and their sparse LED indi
 
 Lighting profiles can be saved locally, loaded into the live preview, deleted, and imported/exported as validated versioned JSON. These browser-local profiles do not claim to be onboard profiles; device persistence remains a separate protocol feature.
 
-All four 512-byte keymap layers can be read and decoded. The semantic remapping editor supports standard keyboard keys, Ctrl/Shift/Alt/Win combinations, disabling a key, assigning Fn, confirmed wireless/device actions, and confirmed lighting controls. Reset remains readable in a factory keymap but is intentionally excluded from assignable actions. A persistent keymap change is available only after a complete CRC-valid baseline read, preserves reserved hardware entries, and is accepted only when an immediate full readback matches exactly.
+All four 512-byte keymap layers can be read and decoded. The semantic remapping editor supports standard keyboard keys, Ctrl/Shift/Alt/Win combinations, direct mouse clicks/scrolling, multimedia and application controls, disabling a key, assigning Fn, confirmed wireless/device actions, and confirmed lighting controls. Reset remains readable in a factory keymap but is intentionally excluded from assignable actions. A persistent keymap change is available only after a complete CRC-valid baseline read, preserves reserved hardware entries, and is accepted only when an immediate full readback matches exactly.
 
 Debounce can be set to the B68-supported 1–4 ms range. The operation patches only the confirmed debounce byte in a CRC-valid onboard record and requires a fresh `GetLED` readback to match before reporting success.
 

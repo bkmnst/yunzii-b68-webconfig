@@ -26,6 +26,7 @@ import { B68_WIRED_PRODUCT_ID, B68_WIRED_VENDOR_ID, firmwareFromUsbDescriptor } 
 import { encodeSafeSpecialAssignment, LIGHTING_ASSIGNMENTS, SAFE_DEVICE_ASSIGNMENTS } from './special-assignments'
 import { B68_LIGHTING_EFFECTS } from './effects'
 import { encodeMacroAssignment, type HardwareMacro, type HardwareMacroEvent, type MacroPlaybackMode } from './macro'
+import { encodeDirectAssignment, MOUSE_ASSIGNMENTS, MULTIMEDIA_ASSIGNMENTS } from './direct-assignments'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 const transport = new KeyboardTransport()
@@ -103,7 +104,7 @@ app.innerHTML = `
         <label>Layer <select id="remap-layer"></select></label>
         <button id="read-remap-layer" class="secondary" disabled>Read layer</button>
         <label>Physical key <select id="remap-key"></select></label>
-        <label>Assignment <select id="remap-kind"><option value="keyboard">Keyboard key / combo</option><option value="device">Device action</option><option value="lighting">Lighting action</option><option value="macro">Macro</option><option value="disabled">Disable</option><option value="fn">Fn</option></select></label>
+        <label>Assignment <select id="remap-kind"><option value="keyboard">Keyboard key / combo</option><option value="mouse">Mouse action</option><option value="multimedia">Multimedia action</option><option value="device">Device action</option><option value="lighting">Lighting action</option><option value="macro">Macro</option><option value="disabled">Disable</option><option value="fn">Fn</option></select></label>
         <label>Key <select id="remap-usage"></select></label>
         <label id="remap-special-label" hidden>Action <select id="remap-special"></select></label>
         <label id="remap-macro-label" hidden>Macro <select id="remap-macro"></select></label>
@@ -308,7 +309,9 @@ renderMacroEventInput()
 
 function renderSpecialAssignmentOptions(): void {
   const options = ui.remapKind.value === 'device' ? SAFE_DEVICE_ASSIGNMENTS
-    : ui.remapKind.value === 'lighting' ? LIGHTING_ASSIGNMENTS : []
+    : ui.remapKind.value === 'lighting' ? LIGHTING_ASSIGNMENTS
+      : ui.remapKind.value === 'mouse' ? MOUSE_ASSIGNMENTS
+        : ui.remapKind.value === 'multimedia' ? MULTIMEDIA_ASSIGNMENTS : []
   ui.remapSpecial.replaceChildren(...options.map((option) => new Option(option.label, option.id)))
   ui.remapSpecialLabel.hidden = options.length === 0
 }
@@ -671,6 +674,7 @@ ui.stageRemap.addEventListener('click', () => {
   const assignment = ui.remapKind.value === 'disabled' ? encodeDisabledAssignment()
     : ui.remapKind.value === 'fn' ? encodeFnAssignment()
     : ui.remapKind.value === 'device' || ui.remapKind.value === 'lighting' ? encodeSafeSpecialAssignment(ui.remapSpecial.value)
+    : ui.remapKind.value === 'mouse' || ui.remapKind.value === 'multimedia' ? encodeDirectAssignment(ui.remapSpecial.value)
     : ui.remapKind.value === 'macro' ? { bytes: [...encodeMacroAssignment(
       Number(ui.remapMacro.value),
       ui.remapPlayback.value as MacroPlaybackMode,

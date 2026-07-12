@@ -19,6 +19,8 @@ describe('semantic assignment labels', () => {
     expect(assignmentLabel({ bytes: [0x07, 0, 0, 0x05] })).toBe('Bluetooth slot 1')
     expect(assignmentLabel({ bytes: [0x08, 3, 1, 0] })).toBe('Brightness up')
     expect(assignmentLabel({ bytes: [0x07, 0, 0, 0x0a] })).toBe('Device command 0x0A')
+    expect(assignmentLabel({ bytes: [0x01, 0, 0, 0x16] })).toBe('Left double-click')
+    expect(assignmentLabel({ bytes: [0x04, 0, 0, 0x25] })).toBe('Next track')
     expect(assignmentLabel({ bytes: [0, 0, 0, 0] })).toBe('Disabled')
   })
 })

@@ -23,6 +23,8 @@ export type SemanticMatrixAssignment =
   | { kind: 'disabled' }
   | { kind: 'keyboard'; modifiers: number; usage: number }
   | { kind: 'macro'; index: number; mode: MacroPlaybackMode; repeatCount: number }
+  | { kind: 'mouse-command'; command: number }
+  | { kind: 'multimedia-command'; command: number }
   | { kind: 'fn' }
   | { kind: 'device-command'; command: number }
   | { kind: 'lighting-command'; group: number; value: number; parameter: number }
@@ -38,6 +40,8 @@ export function decodeSemanticAssignment(assignment: MatrixAssignment): Semantic
     const macro = decodeMacroAssignment(Uint8Array.from(assignment.bytes))
     return { kind: 'macro', ...macro }
   }
+  if (type === 0x01 && modifiers === 0 && parameter === 0) return { kind: 'mouse-command', command: usage }
+  if (type === 0x04 && modifiers === 0 && parameter === 0) return { kind: 'multimedia-command', command: usage }
   if (type === 0x0d && modifiers === 0 && parameter === 0 && usage === 0) return { kind: 'fn' }
   if (type === 0x07 && modifiers === 0 && parameter === 0) return { kind: 'device-command', command: usage }
   if (type === 0x08) return { kind: 'lighting-command', group: modifiers, value: parameter, parameter: usage }

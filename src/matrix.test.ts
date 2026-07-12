@@ -72,6 +72,8 @@ describe('B68 matrix protocol', () => {
     expect(decodeSemanticAssignment({ bytes: [0x0d, 0, 0, 0] })).toEqual({ kind: 'fn' })
     expect(decodeSemanticAssignment({ bytes: [0x07, 0, 0, 0x14] })).toEqual({ kind: 'device-command', command: 0x14 })
     expect(decodeSemanticAssignment({ bytes: [0x08, 3, 1, 0] })).toEqual({ kind: 'lighting-command', group: 3, value: 1, parameter: 0 })
+    expect(decodeSemanticAssignment({ bytes: [0x01, 0, 0, 0x11] })).toEqual({ kind: 'mouse-command', command: 0x11 })
+    expect(decodeSemanticAssignment({ bytes: [0x04, 0, 0, 0x22] })).toEqual({ kind: 'multimedia-command', command: 0x22 })
     expect(encodeKeyboardAssignment(0x40, 0).bytes).toEqual([0, 0x40, 0, 0])
     expect(encodeDisabledAssignment().bytes).toEqual([0, 0, 0, 0])
     expect(encodeFnAssignment().bytes).toEqual([0x0d, 0, 0, 0])
