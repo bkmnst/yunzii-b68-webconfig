@@ -29,6 +29,16 @@ function matrixResponse(matrix: B68MatrixLayer): DataView {
   return new DataView(response.buffer)
 }
 
+function configurationResponse(debounceMs: number): DataView {
+  const response = new Uint8Array(519)
+  response.set([0x84, 0, 0, 1, 0, 0x90, 1])
+  response[7 + 3] = debounceMs
+  response[7 + 10] = 13
+  response[7 + 126] = 0x5a
+  response[7 + 127] = 0xa5
+  return new DataView(response.buffer)
+}
+
 describe('KeyboardTransport', () => {
   it('connects only an allowlisted device with a vendor collection', async () => {
     const transport = new KeyboardTransport()
@@ -185,6 +195,43 @@ describe('KeyboardTransport', () => {
       result: 'ok',
       message: expect.stringContaining('Rainbow wheel'),
     })
+  })
+
+  it('changes only typed debounce and requires a matching GetLED readback', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn()
+        .mockResolvedValueOnce(configurationResponse(1))
+        .mockResolvedValueOnce(configurationResponse(4)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await expect(transport.applyDebounce(4)).rejects.toThrow('Read and validate')
+    await transport.inspectOnboardLighting()
+    await transport.applyDebounce(4)
+
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(3)
+    const payload = vi.mocked(device.sendFeatureReport).mock.calls[1][1] as Uint8Array
+    expect([...payload.slice(0, 7)]).toEqual([0x04, 0, 0, 1, 0, 0x80, 0])
+    expect(payload[10]).toBe(4)
+    expect(transport.status().configuration).toMatchObject({ state: 'available', value: { debounceMs: 4 } })
+  })
+
+  it('rejects a debounce write whose readback does not match', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn().mockResolvedValue(configurationResponse(1)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectOnboardLighting()
+    await expect(transport.applyDebounce(4)).rejects.toThrow('did not confirm')
   })
 
   it('uses the confirmed read-only GetMatrix request for the default layer', async () => {

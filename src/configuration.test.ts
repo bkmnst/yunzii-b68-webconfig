@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseB68OnboardConfiguration } from './configuration'
+import { buildSetConfigurationPayload, parseB68OnboardConfiguration } from './configuration'
 
 describe('B68 onboard configuration', () => {
   it('parses fields confirmed by the real 400-byte GetLED capture', () => {
@@ -11,6 +11,22 @@ describe('B68 onboard configuration', () => {
     record[127] = 0xa5
     const parsed = parseB68OnboardConfiguration(record)
     expect(parsed).toMatchObject({ debounceMs: 1, hardwareEffectId: 13, effectName: 'Rainbow wheel', effectParameter: 0x20 })
+  })
+
+  it('builds a typed SetLED record by patching only confirmed debounce byte 3', () => {
+    const bytes = new Uint8Array(128)
+    bytes[3] = 1
+    bytes[10] = 13
+    bytes[126] = 0x5a
+    bytes[127] = 0xa5
+    const baseline = parseB68OnboardConfiguration(bytes)
+    const payload = buildSetConfigurationPayload(baseline, { debounceMs: 4 })
+    expect(payload).toHaveLength(519)
+    expect([...payload.slice(0, 7)]).toEqual([0x04, 0, 0, 1, 0, 0x80, 0])
+    expect(payload[10]).toBe(4)
+    expect([...payload.slice(7, 10)]).toEqual([...bytes.slice(0, 3)])
+    expect([...payload.slice(11, 135)]).toEqual([...bytes.slice(4)])
+    expect(() => buildSetConfigurationPayload(baseline, { debounceMs: 0 })).toThrow('1 to 4')
   })
 
   it('rejects bad markers and debounce bounds while preserving unknown effects', () => {

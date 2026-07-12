@@ -14,6 +14,26 @@ export interface B68OnboardConfiguration {
   raw: readonly number[]
 }
 
+export interface B68ConfigurationPatch {
+  debounceMs: number
+}
+
+export function buildSetConfigurationPayload(
+  baseline: B68OnboardConfiguration,
+  patch: B68ConfigurationPatch,
+): Uint8Array<ArrayBuffer> {
+  if (!Number.isInteger(patch.debounceMs) || patch.debounceMs < B68_DEBOUNCE_MIN_MS || patch.debounceMs > B68_DEBOUNCE_MAX_MS) {
+    throw new RangeError('B68 debounce must be an integer from 1 to 4 ms.')
+  }
+  // Validate the complete baseline and its marker before preserving all unknown fields.
+  parseB68OnboardConfiguration(baseline.raw)
+  const payload = new Uint8Array(new ArrayBuffer(519))
+  payload.set([0x04, 0, 0, 1, 0, B68_CONFIGURATION_LENGTH, 0])
+  payload.set(baseline.raw, 7)
+  payload[7 + 3] = patch.debounceMs
+  return payload
+}
+
 /** Parses the hardware-backed first 128 bytes returned by GetLED. */
 export function parseB68OnboardConfiguration(bytes: ArrayLike<number>): B68OnboardConfiguration {
   if (bytes.length < B68_CONFIGURATION_LENGTH) throw new RangeError('B68 configuration record is shorter than 128 bytes.')

@@ -80,6 +80,10 @@ app.innerHTML = `
         <button id="read-usb-firmware" class="text-button" disabled>Read USB firmware</button>
         <span id="last-refresh">Not refreshed</span>
       </div>
+      <div class="profile-controls hardware-controls">
+        <label>Debounce <select id="debounce-setting"><option value="1">1 ms</option><option value="2">2 ms</option><option value="3">3 ms</option><option value="4">4 ms</option></select></label>
+        <button id="apply-debounce" class="secondary" disabled>Apply and verify debounce</button>
+      </div>
     </section>
 
     <section class="lighting-panel" aria-labelledby="remap-title">
@@ -156,6 +160,8 @@ const ui = {
   disconnect: document.querySelector<HTMLButtonElement>('#disconnect')!,
   refresh: document.querySelector<HTMLButtonElement>('#refresh')!,
   readUsbFirmware: document.querySelector<HTMLButtonElement>('#read-usb-firmware')!,
+  debounceSetting: document.querySelector<HTMLSelectElement>('#debounce-setting')!,
+  applyDebounce: document.querySelector<HTMLButtonElement>('#apply-debounce')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
   remapLayer: document.querySelector<HTMLSelectElement>('#remap-layer')!,
@@ -298,6 +304,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.onboardEffectDetail.textContent = onboardEffectDetail
   ui.debounce.textContent = debounce
   ui.debounceDetail.textContent = debounceDetail
+  if (status.configuration.state === 'available') ui.debounceSetting.value = String(status.configuration.value.debounceMs)
   ui.title.textContent = status.connected ? (status.productName || status.knownDevice!.displayName) : 'Waiting for a keyboard'
   ui.pill.textContent = status.connected ? 'Connected' : 'Disconnected'
   ui.pill.classList.toggle('connected', status.connected)
@@ -309,6 +316,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.disconnect.hidden = !status.connected
   ui.refresh.disabled = !status.connected
   ui.readUsbFirmware.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired' || !navigator.usb
+  ui.applyDebounce.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
   ui.copy.disabled = !status.connected
   ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.readRemapLayer.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
@@ -368,6 +376,18 @@ async function refresh(): Promise<void> {
 ui.connect.addEventListener('click', () => void connect())
 ui.disconnect.addEventListener('click', () => void transport.disconnect())
 ui.refresh.addEventListener('click', () => void refresh())
+ui.applyDebounce.addEventListener('click', async () => {
+  const debounceMs = Number(ui.debounceSetting.value)
+  ui.applyDebounce.disabled = true
+  ui.notice.textContent = `Applying ${debounceMs} ms debounce and verifying hardware readback…`
+  try {
+    await transport.applyDebounce(debounceMs)
+    ui.notice.textContent = `Debounce set to ${debounceMs} ms and verified.`
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The debounce setting was not verified.'
+  }
+  render()
+})
 ui.readUsbFirmware.addEventListener('click', async () => {
   if (!navigator.usb) {
     ui.notice.textContent = 'WebUSB is unavailable in this browser.'

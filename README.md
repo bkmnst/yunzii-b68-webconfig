@@ -25,6 +25,8 @@ Lighting profiles can be saved locally, loaded into the live preview, deleted, a
 
 All four 512-byte keymap layers can be read and decoded. The semantic remapping editor supports standard keyboard keys, Ctrl/Shift/Alt/Win combinations, disabling a key, and assigning Fn. A persistent keymap change is available only after a complete CRC-valid baseline read, preserves reserved hardware entries, and is accepted only when an immediate full readback matches exactly.
 
+Debounce can be set to the B68-supported 1–4 ms range. The operation patches only the confirmed debounce byte in a CRC-valid onboard record and requires a fresh `GetLED` readback to match before reporting success.
+
 ## Safety boundary
 
 Allowed behavior currently includes device selection, descriptor inspection, validated status/keymap reads, explicit live RGB preview, and typed keymap changes with exact readback. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.

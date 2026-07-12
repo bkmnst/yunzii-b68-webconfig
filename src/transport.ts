@@ -1,5 +1,5 @@
 import { allCollections, matchKnownDevice } from './devices'
-import { parseB68OnboardConfiguration, type B68OnboardConfiguration } from './configuration'
+import { buildSetConfigurationPayload, parseB68OnboardConfiguration, type B68OnboardConfiguration } from './configuration'
 import {
   B68_MATRIX_CRC_INDEX,
   buildGetMatrixPayload,
@@ -231,6 +231,25 @@ export class KeyboardTransport extends EventTarget {
       this.#configuration = { state: 'invalid-response', message, raw: bytes }
       this.dispatchEvent(new Event('statuschange'))
     }
+  }
+
+  async applyDebounce(debounceMs: number): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
+      throw new Error('A wired B68 must be connected to change debounce.')
+    }
+    if (this.#configuration.state !== 'available') {
+      throw new Error('Read and validate the onboard configuration before changing debounce.')
+    }
+    const payload = buildSetConfigurationPayload(this.#configuration.value, { debounceMs })
+    this.stopLiveColor()
+    await this.#device.sendFeatureReport(6, payload)
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 60))
+    await this.inspectOnboardLighting()
+    if (this.#configuration.state !== 'available' || this.#configuration.value.debounceMs !== debounceMs) {
+      this.#record(`Debounce write readback mismatch; requested ${debounceMs} ms`)
+      throw new Error('The keyboard readback did not confirm the requested debounce setting.')
+    }
+    this.#record(`Debounce write verified: ${debounceMs} ms`)
   }
 
   async inspectMatrix(layer: B68Layer): Promise<void> {
