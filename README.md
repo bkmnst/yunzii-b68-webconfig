@@ -29,6 +29,8 @@ Debounce can be set to the B68-supported 1–4 ms range. The operation patches o
 
 All 20 onboard effects from the B68 model definition can be selected persistently. Effect selection patches only the confirmed hardware-effect byte in the validated current record and likewise requires matching `GetLED` readback.
 
+The macro editor can build named keyboard press/release sequences with per-event delays, write the typed paged archive, and require a complete decoded byte-for-byte readback. Verified macros can then be assigned to keys with fixed-count, until-release, or until-any-key playback. Clearing the final macro remains disabled because the native zero-length path sends no clearing page.
+
 ## Safety boundary
 
 Allowed behavior currently includes device selection, descriptor inspection, validated status/keymap reads, explicit live RGB preview, and typed keymap changes with exact readback. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.

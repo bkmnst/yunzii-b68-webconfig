@@ -25,6 +25,7 @@ import type { DeviceStatus, MetricResult } from './types'
 import { B68_WIRED_PRODUCT_ID, B68_WIRED_VENDOR_ID, firmwareFromUsbDescriptor } from './usb-firmware'
 import { encodeSafeSpecialAssignment, LIGHTING_ASSIGNMENTS, SAFE_DEVICE_ASSIGNMENTS } from './special-assignments'
 import { B68_LIGHTING_EFFECTS } from './effects'
+import { encodeMacroAssignment, type HardwareMacro, type HardwareMacroEvent, type MacroPlaybackMode } from './macro'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 const transport = new KeyboardTransport()
@@ -99,14 +100,37 @@ app.innerHTML = `
         <label>Layer <select id="remap-layer"></select></label>
         <button id="read-remap-layer" class="secondary" disabled>Read layer</button>
         <label>Physical key <select id="remap-key"></select></label>
-        <label>Assignment <select id="remap-kind"><option value="keyboard">Keyboard key / combo</option><option value="device">Device action</option><option value="lighting">Lighting action</option><option value="disabled">Disable</option><option value="fn">Fn</option></select></label>
+        <label>Assignment <select id="remap-kind"><option value="keyboard">Keyboard key / combo</option><option value="device">Device action</option><option value="lighting">Lighting action</option><option value="macro">Macro</option><option value="disabled">Disable</option><option value="fn">Fn</option></select></label>
         <label>Key <select id="remap-usage"></select></label>
         <label id="remap-special-label" hidden>Action <select id="remap-special"></select></label>
+        <label id="remap-macro-label" hidden>Macro <select id="remap-macro"></select></label>
+        <label id="remap-playback-label" hidden>Playback <select id="remap-playback"><option value="count">Fixed count</option><option value="until-release">Until key release</option><option value="until-any-key">Until any key</option></select></label>
+        <label id="remap-repeat-label" hidden>Repeats <input id="remap-repeat" type="number" min="1" max="255" value="1" /></label>
         <fieldset id="remap-modifiers"><legend>Modifiers</legend></fieldset>
         <button id="stage-remap" class="secondary" disabled>Stage assignment</button>
         <button id="apply-remap" class="primary" disabled>Apply and verify</button>
         <span id="remap-summary">Read a layer to begin.</span>
       </div>
+    </section>
+
+    <section class="lighting-panel" aria-labelledby="macro-title">
+      <div class="lighting-heading"><div><p class="kicker">Macro editor</p><h2 id="macro-title">Build keyboard sequences</h2>
+      <p>Read the device archive first. Create explicit press/release events, then write the typed archive and verify it byte-for-byte.</p></div></div>
+      <div class="profile-controls macro-controls">
+        <button id="read-macros" class="secondary" disabled>Read macros</button>
+        <label>Stored / staged <select id="macro-list"><option value="">No macros</option></select></label>
+        <button id="delete-macro" class="secondary" disabled>Delete selected</button>
+        <label>Name <input id="macro-name" maxlength="127" /></label>
+        <label>Key <select id="macro-key"></select></label>
+        <label>Action <select id="macro-action"><option value="press">Press</option><option value="release">Release</option></select></label>
+        <label>Delay before event <input id="macro-delay" type="number" min="0" max="1048575" value="20" /> ms</label>
+        <button id="add-macro-event" class="secondary">Add event</button>
+        <button id="clear-macro-events" class="secondary" disabled>Clear events</button>
+        <button id="save-macro" class="secondary" disabled>Add macro to archive</button>
+        <button id="apply-macros" class="primary" disabled>Apply archive and verify</button>
+      </div>
+      <ol id="macro-events" class="macro-events"><li>No draft events.</li></ol>
+      <p id="macro-summary">Read the keyboard archive before applying macros.</p>
     </section>
 
     <section class="lighting-panel" aria-labelledby="lighting-title">
@@ -180,10 +204,29 @@ const ui = {
   remapUsage: document.querySelector<HTMLSelectElement>('#remap-usage')!,
   remapSpecial: document.querySelector<HTMLSelectElement>('#remap-special')!,
   remapSpecialLabel: document.querySelector<HTMLElement>('#remap-special-label')!,
+  remapMacro: document.querySelector<HTMLSelectElement>('#remap-macro')!,
+  remapMacroLabel: document.querySelector<HTMLElement>('#remap-macro-label')!,
+  remapPlayback: document.querySelector<HTMLSelectElement>('#remap-playback')!,
+  remapPlaybackLabel: document.querySelector<HTMLElement>('#remap-playback-label')!,
+  remapRepeat: document.querySelector<HTMLInputElement>('#remap-repeat')!,
+  remapRepeatLabel: document.querySelector<HTMLElement>('#remap-repeat-label')!,
   remapModifiers: document.querySelector<HTMLFieldSetElement>('#remap-modifiers')!,
   stageRemap: document.querySelector<HTMLButtonElement>('#stage-remap')!,
   applyRemap: document.querySelector<HTMLButtonElement>('#apply-remap')!,
   remapSummary: document.querySelector<HTMLElement>('#remap-summary')!,
+  readMacros: document.querySelector<HTMLButtonElement>('#read-macros')!,
+  macroList: document.querySelector<HTMLSelectElement>('#macro-list')!,
+  deleteMacro: document.querySelector<HTMLButtonElement>('#delete-macro')!,
+  macroName: document.querySelector<HTMLInputElement>('#macro-name')!,
+  macroKey: document.querySelector<HTMLSelectElement>('#macro-key')!,
+  macroAction: document.querySelector<HTMLSelectElement>('#macro-action')!,
+  macroDelay: document.querySelector<HTMLInputElement>('#macro-delay')!,
+  addMacroEvent: document.querySelector<HTMLButtonElement>('#add-macro-event')!,
+  clearMacroEvents: document.querySelector<HTMLButtonElement>('#clear-macro-events')!,
+  saveMacro: document.querySelector<HTMLButtonElement>('#save-macro')!,
+  applyMacros: document.querySelector<HTMLButtonElement>('#apply-macros')!,
+  macroEvents: document.querySelector<HTMLOListElement>('#macro-events')!,
+  macroSummary: document.querySelector<HTMLElement>('#macro-summary')!,
   matrixLayer: document.querySelector<HTMLSelectElement>('#matrix-layer')!,
   applyColor: document.querySelector<HTMLButtonElement>('#apply-color')!,
   liveColor: document.querySelector<HTMLInputElement>('#live-color')!,
@@ -218,12 +261,15 @@ const selectedLeds = new Set<number>()
 const keyColors = new Map<number, { red: number; green: number; blue: number }>()
 let lightingProfiles: LightingProfile[] = loadStoredProfiles(localStorage)
 let stagedMatrix: B68MatrixLayer | null = null
+let macroDrafts: HardwareMacro[] | null = null
+let macroDraftEvents: HardwareMacroEvent[] = []
 
 for (const effect of B68_LIGHTING_EFFECTS) ui.onboardEffectSetting.add(new Option(effect.name, String(effect.hardwareId)))
 
 for (const layer of B68_LAYERS) ui.remapLayer.add(new Option(layer.toUpperCase(), layer))
 for (const key of B68_KEYS) ui.remapKey.add(new Option(key.label, String(key.ledIndex)))
 for (const key of KEYBOARD_USAGE_OPTIONS) ui.remapUsage.add(new Option(key.label, String(key.usage)))
+for (const key of KEYBOARD_USAGE_OPTIONS) ui.macroKey.add(new Option(key.label, String(key.usage)))
 for (const modifier of MODIFIER_OPTIONS) {
   const label = document.createElement('label')
   const input = document.createElement('input')
@@ -238,6 +284,29 @@ function renderSpecialAssignmentOptions(): void {
     : ui.remapKind.value === 'lighting' ? LIGHTING_ASSIGNMENTS : []
   ui.remapSpecial.replaceChildren(...options.map((option) => new Option(option.label, option.id)))
   ui.remapSpecialLabel.hidden = options.length === 0
+}
+
+function renderMacroEditor(): void {
+  ui.macroEvents.replaceChildren(...(macroDraftEvents.length > 0
+    ? macroDraftEvents.map((event) => {
+      const item = document.createElement('li')
+      const key = KEYBOARD_USAGE_OPTIONS.find((option) => option.usage === event.value)?.label ?? `0x${event.value.toString(16)}`
+      item.textContent = `${event.delayMs} ms · ${event.released ? 'Release' : 'Press'} ${key}`
+      return item
+    })
+    : [Object.assign(document.createElement('li'), { textContent: 'No draft events.' })]))
+  ui.clearMacroEvents.disabled = macroDraftEvents.length === 0
+  ui.saveMacro.disabled = macroDrafts === null || macroDraftEvents.length === 0 || ui.macroName.value.trim().length === 0
+  ui.macroList.replaceChildren(new Option(macroDrafts?.length ? 'Select macro' : 'No macros', ''))
+  macroDrafts?.forEach((macro, index) => ui.macroList.add(new Option(`${index + 1}. ${macro.name}`, String(index))))
+  ui.deleteMacro.disabled = !ui.macroList.value
+  ui.applyMacros.disabled = macroDrafts === null || macroDrafts.length === 0
+  ui.remapMacro.replaceChildren(...(transport.macros ?? []).map((macro, index) => new Option(`${index + 1}. ${macro.name}`, String(index))))
+  const macroMode = ui.remapKind.value === 'macro'
+  ui.remapMacroLabel.hidden = !macroMode
+  ui.remapPlaybackLabel.hidden = !macroMode
+  ui.remapRepeatLabel.hidden = !macroMode || ui.remapPlayback.value !== 'count'
+  ui.stageRemap.disabled = !transport.matrix(ui.remapLayer.value as B68Layer) || (macroMode && ui.remapMacro.options.length === 0)
 }
 
 for (const row of B68_KEY_ROWS) {
@@ -341,11 +410,13 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.readUsbFirmware.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired' || !navigator.usb
   ui.applyDebounce.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
   ui.applyOnboardEffect.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
+  ui.readMacros.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.copy.disabled = !status.connected
   ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.inspectMacros.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.readRemapLayer.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.stageRemap.disabled = !transport.matrix(ui.remapLayer.value as B68Layer)
+    || (ui.remapKind.value === 'macro' && ui.remapMacro.options.length === 0)
   ui.applyRemap.disabled = !stagedMatrix
   ui.applyColor.disabled = !status.connected
   ui.stopColor.disabled = !status.connected || !transport.livePreviewActive
@@ -485,7 +556,9 @@ ui.remapKind.addEventListener('change', () => {
   ui.remapUsage.disabled = !keyboard
   ui.remapModifiers.disabled = !keyboard
   renderSpecialAssignmentOptions()
+  renderMacroEditor()
 })
+ui.remapPlayback.addEventListener('change', renderMacroEditor)
 ui.readRemapLayer.addEventListener('click', async () => {
   const layer = ui.remapLayer.value as B68Layer
   stagedMatrix = null
@@ -504,12 +577,76 @@ ui.stageRemap.addEventListener('click', () => {
   const assignment = ui.remapKind.value === 'disabled' ? encodeDisabledAssignment()
     : ui.remapKind.value === 'fn' ? encodeFnAssignment()
     : ui.remapKind.value === 'device' || ui.remapKind.value === 'lighting' ? encodeSafeSpecialAssignment(ui.remapSpecial.value)
+    : ui.remapKind.value === 'macro' ? { bytes: [...encodeMacroAssignment(
+      Number(ui.remapMacro.value),
+      ui.remapPlayback.value as MacroPlaybackMode,
+      Number(ui.remapRepeat.value),
+    )] as [number, number, number, number] }
     : encodeKeyboardAssignment(
       [...ui.remapModifiers.querySelectorAll<HTMLInputElement>('input:checked')].reduce((mask, input) => mask | Number(input.value), 0),
       Number(ui.remapUsage.value),
     )
   stagedMatrix = replaceMatrixAssignment(baseline, index, assignment)
   ui.remapSummary.textContent = `${B68_KEYS.find((key) => key.ledIndex === index)?.label ?? `Slot ${index}`} → ${assignmentLabel(assignment)} (staged)`
+  render()
+})
+ui.readMacros.addEventListener('click', async () => {
+  ui.readMacros.disabled = true
+  ui.notice.textContent = 'Reading and validating the device macro archive…'
+  await transport.inspectMacros()
+  macroDrafts = transport.macros?.map((macro) => ({ ...macro, events: macro.events.map((event) => ({ ...event })) })) ?? null
+  ui.macroSummary.textContent = macroDrafts ? `${macroDrafts.length} macro${macroDrafts.length === 1 ? '' : 's'} loaded from the keyboard.` : 'Macro archive validation failed.'
+  renderMacroEditor()
+  render()
+})
+ui.macroName.addEventListener('input', renderMacroEditor)
+ui.addMacroEvent.addEventListener('click', () => {
+  const delayMs = Number(ui.macroDelay.value)
+  if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 0xfffff) {
+    ui.notice.textContent = 'Macro delay must be an integer from 0 to 1,048,575 ms.'
+    return
+  }
+  macroDraftEvents = [...macroDraftEvents, {
+    type: 1,
+    delayMs,
+    value: Number(ui.macroKey.value),
+    released: ui.macroAction.value === 'release',
+  }]
+  renderMacroEditor()
+})
+ui.clearMacroEvents.addEventListener('click', () => { macroDraftEvents = []; renderMacroEditor() })
+ui.saveMacro.addEventListener('click', () => {
+  if (macroDrafts === null || macroDraftEvents.length === 0) return
+  const name = ui.macroName.value.trim()
+  if (!name) return
+  macroDrafts = [...macroDrafts, { name, events: macroDraftEvents.map((event) => ({ ...event })) }]
+  macroDraftEvents = []
+  ui.macroName.value = ''
+  ui.macroSummary.textContent = `${macroDrafts.length} macro${macroDrafts.length === 1 ? '' : 's'} staged; apply to write and verify.`
+  renderMacroEditor()
+})
+ui.macroList.addEventListener('change', () => { ui.deleteMacro.disabled = !ui.macroList.value })
+ui.deleteMacro.addEventListener('click', () => {
+  if (macroDrafts === null || ui.macroList.value === '') return
+  macroDrafts = macroDrafts.filter((_, index) => index !== Number(ui.macroList.value))
+  ui.macroSummary.textContent = macroDrafts.length === 0
+    ? 'The final macro cannot be cleared on-device until a clearing packet is confirmed.'
+    : `${macroDrafts.length} macro${macroDrafts.length === 1 ? '' : 's'} staged.`
+  renderMacroEditor()
+})
+ui.applyMacros.addEventListener('click', async () => {
+  if (!macroDrafts?.length) return
+  ui.applyMacros.disabled = true
+  ui.notice.textContent = 'Writing typed macro pages and verifying the complete decoded archive…'
+  try {
+    await transport.applyMacros(macroDrafts)
+    macroDrafts = transport.macros?.map((macro) => ({ ...macro, events: macro.events.map((event) => ({ ...event })) })) ?? null
+    ui.macroSummary.textContent = `${macroDrafts?.length ?? 0} macro(s) applied and verified.`
+    ui.notice.textContent = 'Macro archive applied; byte-for-byte readback matched.'
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The macro archive was not verified.'
+  }
+  renderMacroEditor()
   render()
 })
 ui.applyRemap.addEventListener('click', async () => {

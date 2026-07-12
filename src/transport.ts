@@ -10,7 +10,15 @@ import {
   type B68Layer,
   type B68MatrixLayer,
 } from './matrix'
-import { buildGetMacroPage, decodeMacroArchive, inspectMacroArchiveHeader, parseMacroPageResponse, type HardwareMacro } from './macro'
+import {
+  buildGetMacroPage,
+  buildSetMacroPages,
+  decodeMacroArchive,
+  encodeMacroArchive,
+  inspectMacroArchiveHeader,
+  parseMacroPageResponse,
+  type HardwareMacro,
+} from './macro'
 import {
   buildLiveRgbPayload,
   buildIdentityQueryPayload,
@@ -372,6 +380,29 @@ export class KeyboardTransport extends EventTarget {
       this.#record(`Macro archive read failed: ${message}`)
     }
     this.dispatchEvent(new Event('statuschange'))
+  }
+
+  async applyMacros(macros: readonly HardwareMacro[]): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
+      throw new Error('A wired B68 must be connected to write macros.')
+    }
+    if (this.#macros === null) throw new Error('Read and validate the current macro archive before changing it.')
+    const pages = buildSetMacroPages(macros)
+    if (pages.length === 0) throw new Error('Writing an empty macro archive is not supported because the native app sends no clearing page.')
+    this.stopLiveColor()
+    for (const page of pages) {
+      await this.#device.sendFeatureReport(6, page)
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 100))
+    }
+    await this.inspectMacros()
+    if (this.#macros === null) throw new Error('The macro archive could not be read back after writing.')
+    const requested = encodeMacroArchive(macros)
+    const readback = encodeMacroArchive(this.#macros)
+    if (requested.length !== readback.length || requested.some((byte, index) => byte !== readback[index])) {
+      this.#record('Macro write readback mismatch')
+      throw new Error('The keyboard macro readback did not match the requested archive.')
+    }
+    this.#record(`Macro write verified: ${macros.length} macro(s), ${requested.length} byte(s)`)
   }
 
   async setLiveColor(color: RgbColor): Promise<void> {

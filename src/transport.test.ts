@@ -381,6 +381,45 @@ describe('KeyboardTransport', () => {
     expect(transport.diagnostics()?.featureReads[0]).toMatchObject({ result: 'error', message: expect.stringContaining('page echo') })
   })
 
+  it('writes typed macro pages only after a validated baseline and exact decoded readback', async () => {
+    const macros = [{ name: 'A', events: [{ type: 1 as const, delayMs: 20, value: 4 }] }]
+    const archive = encodeMacroArchive(macros)
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn()
+        .mockResolvedValueOnce(macroPageResponse(0, new Uint8Array()))
+        .mockResolvedValueOnce(macroPageResponse(0, archive)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await expect(transport.applyMacros(macros)).rejects.toThrow('Read and validate')
+    await transport.inspectMacros()
+    await transport.applyMacros(macros)
+
+    expect(transport.macros).toEqual([{ name: 'A', events: [{ type: 1, delayMs: 20, value: 4, released: false }] }])
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(3)
+    const setPage = vi.mocked(device.sendFeatureReport).mock.calls[1][1] as Uint8Array
+    expect([...setPage.slice(0, 7)]).toEqual([5, 0, 0, 6, 0, archive.length, 0])
+  })
+
+  it('refuses an unconfirmed empty-archive clearing write', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn().mockResolvedValue(macroPageResponse(0, new Uint8Array())),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectMacros()
+    await expect(transport.applyMacros([])).rejects.toThrow('empty macro archive')
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(1)
+  })
+
   it('sends only the semantic live RGB feature report', async () => {
     const device = mockDevice({
       collections: [{
