@@ -2,35 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   B68_LED_SLOT_COUNT,
   buildLiveRgbPayload,
-  buildIdentityQueryPayload,
   buildGetOnboardLightingPayload,
   buildPerKeyRgbPayload,
-  hasConfirmedQuery,
   LIVE_RGB_PAYLOAD_LENGTH,
-  parseModelId,
   parseOnboardLightingResponse,
-  validateBattery,
-  validateChecksum,
 } from './protocol'
-
-describe('safe protocol boundary', () => {
-  it('ships no unconfirmed device queries', () => {
-    expect(hasConfirmedQuery('wired', 'firmware')).toBe(false)
-    expect(hasConfirmedQuery('wireless', 'battery')).toBe(false)
-  })
-
-  it('accepts only bounded battery percentages', () => {
-    expect(validateBattery([50], 0)).toMatchObject({ state: 'available', value: 50 })
-    expect(validateBattery([101], 0).state).toBe('invalid-response')
-    expect(validateBattery([], 0).state).toBe('invalid-response')
-  })
-
-  it('validates an additive one-byte checksum', () => {
-    expect(validateChecksum([1, 2, 3])).toBe(true)
-    expect(validateChecksum([1, 2, 4])).toBe(false)
-    expect(validateChecksum([1])).toBe(false)
-  })
-})
 
 describe('live RGB report', () => {
   it('builds the B68 report 6 payload with every mapped LED slot filled', () => {
@@ -64,22 +40,6 @@ describe('live RGB report', () => {
 
   it('rejects per-key colors outside the B68 LED range', () => {
     expect(() => buildPerKeyRgbPayload(new Map([[96, { red: 1, green: 2, blue: 3 }]]))).toThrow(RangeError)
-  })
-})
-
-describe('identity query', () => {
-  it('builds the padded report-6 identity request', () => {
-    const payload = buildIdentityQueryPayload()
-    expect(payload).toHaveLength(519)
-    expect([...payload.slice(0, 6)]).toEqual([0x82, 0x01, 0x00, 0x01, 0x00, 0x06])
-    expect([...payload.slice(6)]).toEqual(Array(513).fill(0))
-  })
-
-  it('parses the model ID at WebHID response byte 12', () => {
-    const response = new Uint8Array(519)
-    response[12] = 0xcd
-    expect(parseModelId(new DataView(response.buffer))).toBe(0xcd)
-    expect(() => parseModelId(new DataView(new ArrayBuffer(12)))).toThrow(RangeError)
   })
 })
 

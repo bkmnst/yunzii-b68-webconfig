@@ -32,15 +32,8 @@ export const KEYBOARD_USAGE_OPTIONS: readonly KeyboardUsageOption[] = [
   { usage: 0x5f, label: 'Numpad 7' }, { usage: 0x60, label: 'Numpad 8' },
   { usage: 0x61, label: 'Numpad 9' }, { usage: 0x62, label: 'Numpad 0' },
   { usage: 0x63, label: 'Numpad .' }, { usage: 0x64, label: 'Non-US \\ and |' },
-  { usage: 0x65, label: 'Application / Menu' }, { usage: 0x66, label: 'Keyboard Power' },
+  { usage: 0x65, label: 'Application / Menu' },
   { usage: 0x67, label: 'Numpad =' }, ...extendedFunctionKeys,
-  { usage: 0x74, label: 'Execute' }, { usage: 0x75, label: 'Help' },
-  { usage: 0x76, label: 'Menu' }, { usage: 0x77, label: 'Select' },
-  { usage: 0x78, label: 'Stop' }, { usage: 0x79, label: 'Again' },
-  { usage: 0x7a, label: 'Undo' }, { usage: 0x7b, label: 'Cut' },
-  { usage: 0x7c, label: 'Copy' }, { usage: 0x7d, label: 'Paste' },
-  { usage: 0x7e, label: 'Find' }, { usage: 0x7f, label: 'Keyboard Mute' },
-  { usage: 0x80, label: 'Keyboard Volume Up' }, { usage: 0x81, label: 'Keyboard Volume Down' },
   { usage: 0x85, label: 'Numpad ,' }, { usage: 0x87, label: 'International 1' },
   { usage: 0x88, label: 'International 2' }, { usage: 0x89, label: 'International 3' },
   { usage: 0x8a, label: 'International 4' }, { usage: 0x8b, label: 'International 5' },
@@ -52,8 +45,3 @@ export const KEYBOARD_USAGE_OPTIONS: readonly KeyboardUsageOption[] = [
   { usage: 0x96, label: 'Language 7' }, { usage: 0x97, label: 'Language 8' },
   { usage: 0x98, label: 'Language 9' },
 ]
-
-export const MODIFIER_OPTIONS = [
-  { mask: 0x01, label: 'Ctrl' }, { mask: 0x02, label: 'Shift' },
-  { mask: 0x04, label: 'Alt' }, { mask: 0x08, label: 'Win' },
-] as const

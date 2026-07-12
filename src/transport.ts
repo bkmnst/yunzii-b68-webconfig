@@ -1,5 +1,5 @@
 import { allCollections, matchKnownDevice } from './devices'
-import { parseBatteryStatusReport } from './battery'
+import { deriveDeviceCapabilities } from './capabilities'
 import { buildSetConfigurationPayload, parseB68OnboardConfiguration, type B68OnboardConfiguration } from './configuration'
 import {
   B68_MATRIX_CRC_INDEX,
@@ -12,30 +12,16 @@ import {
   type B68MatrixLayer,
 } from './matrix'
 import {
-  buildGetMacroPage,
-  buildSetMacroPages,
-  decodeMacroArchive,
-  encodeMacroArchive,
-  inspectMacroArchiveHeader,
-  parseMacroPageResponse,
-  type HardwareMacro,
-} from './macro'
-import {
   buildLiveRgbPayload,
-  buildIdentityQueryPayload,
   buildGetOnboardLightingPayload,
   buildPerKeyRgbPayload,
   LIVE_RGB_REPORT_ID,
   type RgbColor,
-  parseModelId,
   parseOnboardLightingResponse,
-  unsupportedBattery,
-  unsupportedFirmware,
 } from './protocol'
 import type {
   DiagnosticSnapshot,
   DeviceStatus,
-  FirmwareInfo,
   HidReportDescriptor,
   KnownDevice,
   MetricResult,
@@ -52,10 +38,7 @@ export class KeyboardTransport extends EventTarget {
   #livePayload: Uint8Array<ArrayBuffer> | null = null
   #liveColorTimer: ReturnType<typeof setInterval> | null = null
   #configuration: MetricResult<B68OnboardConfiguration> = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
-  #firmware: MetricResult<FirmwareInfo> = unsupportedFirmware()
-  #battery: MetricResult<number> = { state: 'unsupported', message: 'No validated battery status report has been received yet.' }
   #matrices = new Map<B68Layer, B68MatrixLayer>()
-  #macros: readonly HardwareMacro[] | null = null
 
   get device(): HIDDevice | null { return this.#device }
   get knownDevice(): KnownDevice | null { return this.#knownDevice }
@@ -65,7 +48,7 @@ export class KeyboardTransport extends EventTarget {
   }
   get livePreviewActive(): boolean { return this.#liveColorTimer !== null }
   matrix(layer: B68Layer): B68MatrixLayer | undefined { return this.#matrices.get(layer) }
-  get macros(): readonly HardwareMacro[] | null { return this.#macros }
+  get capabilities() { return deriveDeviceCapabilities(this.#knownDevice, this.#collections) }
 
   async connect(device: HIDDevice): Promise<void> {
     const known = matchKnownDevice(device)
@@ -82,10 +65,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
-    this.#firmware = unsupportedFirmware()
-    this.#battery = { state: 'unsupported', message: 'Waiting for a validated battery status report.' }
     this.#matrices.clear()
-    this.#macros = null
     this.#record(
       `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
     )
@@ -97,14 +77,6 @@ export class KeyboardTransport extends EventTarget {
         bytes,
       }]
       this.#record(`Input report ${event.reportId}: ${event.data.byteLength} byte(s); ${bytes.map(hexByte).join(' ')}`)
-      if (event.reportId === 6) {
-        const battery = parseBatteryStatusReport(bytes)
-        if (battery !== null) {
-          this.#battery = { state: 'available', value: battery, raw: bytes }
-          this.#record(`Battery status validated: ${battery}%`)
-          this.dispatchEvent(new Event('statuschange'))
-        }
-      }
       this.dispatchEvent(new CustomEvent('inputreport', { detail: event }))
     }
     this.dispatchEvent(new Event('statuschange'))
@@ -122,10 +94,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
-    this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
-    this.#battery = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
-    this.#macros = null
     this.#record('Disconnected')
     if (device?.opened) await device.close()
     this.dispatchEvent(new Event('statuschange'))
@@ -142,88 +111,13 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
-    this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
-    this.#battery = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
-    this.#macros = null
     this.#record('Device disconnected')
     this.dispatchEvent(new Event('statuschange'))
   }
 
-  async queryFirmware(): Promise<MetricResult<FirmwareInfo>> {
-    if (!this.#device?.opened) return { state: 'disconnected', message: 'Connect the keyboard first.' }
-    if (this.#firmware.state === 'available') return this.#firmware
-    const supportsReport5 = this.#collections.some((collection) =>
-      collection.featureReports.some((report) => report.reportId === 5),
-    )
-    if (supportsReport5) await this.#readDiagnosticFeatureReport(5)
-
-    const supportsReport6 = this.#collections.some((collection) =>
-      collection.featureReports.some((report) => report.reportId === 6 && report.byteLength >= 519),
-    )
-    if (!supportsReport6) {
-      const report5 = this.#featureReads.find((read) => read.reportId === 5)
-      if (report5?.result === 'ok') {
-        return {
-          state: 'invalid-response',
-          message: 'Feature report 5 was read successfully; its firmware encoding is not decoded yet.',
-          raw: report5.bytes ?? [],
-        }
-      }
-      if (report5?.result === 'error') {
-        return { state: 'invalid-response', message: `Feature report 5 failed: ${report5.message}`, raw: [] }
-      }
-      return unsupportedFirmware()
-    }
-
-    try {
-      await this.#device.sendFeatureReport(6, buildIdentityQueryPayload())
-      const view = await this.#device.receiveFeatureReport(6)
-      const bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
-      const modelId = parseModelId(view)
-      const modelHex = `0x${modelId.toString(16).padStart(2, '0').toUpperCase()}`
-      this.#featureReads = [
-        ...this.#featureReads.filter((read) => read.reportId !== 6),
-        { reportId: 6, result: 'ok', bytes, message: `Identity response; model ID ${modelHex}` },
-      ]
-      this.#record(`Identity report read: model ${modelHex}; ${bytes.length} byte(s)`)
-      return {
-        state: 'invalid-response',
-        message: `Model ID ${modelHex} identified; firmware encoding is being decoded.`,
-        raw: bytes,
-      }
-    } catch (error) {
-      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      this.#featureReads = [
-        ...this.#featureReads.filter((read) => read.reportId !== 6),
-        { reportId: 6, result: 'error', message },
-      ]
-      this.#record(`Identity report failed: ${message}`)
-      return { state: 'invalid-response', message: `Identity query failed: ${message}`, raw: [] }
-    }
-  }
-
-  acceptUsbFirmware(result: MetricResult<FirmwareInfo>, vendorId: number, productId: number): void {
-    if (!this.#device?.opened || !this.#knownDevice) throw new Error('Connect the keyboard through WebHID first.')
-    if (this.#device.vendorId !== vendorId || this.#device.productId !== productId) {
-      throw new Error('The USB descriptor does not belong to the connected keyboard.')
-    }
-    this.#firmware = result
-    this.#record(result.state === 'available'
-      ? `USB firmware descriptor read: ${result.value.formatted}`
-      : `USB firmware descriptor invalid: ${result.message}`)
-    this.dispatchEvent(new Event('statuschange'))
-  }
-
-  async queryBattery(): Promise<MetricResult<number>> {
-    if (!this.#device?.opened || !this.#knownDevice) {
-      return { state: 'disconnected', message: 'Connect the keyboard first.' }
-    }
-    return this.#battery.state === 'available' ? this.#battery : unsupportedBattery(this.#knownDevice.connectionType)
-  }
-
   async inspectOnboardLighting(): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') return
+    if (!this.#device?.opened || !this.capabilities.debounce) return
     const supportsReport6 = this.#collections.some((collection) =>
       collection.featureReports.some((report) => report.reportId === 6 && report.byteLength >= 519),
     )
@@ -242,7 +136,7 @@ export class KeyboardTransport extends EventTarget {
         reportId: 6,
         result: 'ok',
         bytes,
-        message: `GetLED validated; debounce ${configuration.debounceMs} ms; ${configuration.effectName}; vendor label ${configuration.effect?.vendorLabel ?? 'unknown'}; speed ${configuration.speedLevel}/4; brightness ${configuration.brightnessLevel}/4`,
+        message: `GetLED validated; debounce ${configuration.debounceMs} ms; ${configuration.effectName}`,
       }]
       this.#record(`GetLED report read and validated: ${lighting.length} data byte(s)`)
       this.dispatchEvent(new Event('statuschange'))
@@ -261,8 +155,8 @@ export class KeyboardTransport extends EventTarget {
   }
 
   async applyDebounce(debounceMs: number): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
-      throw new Error('A wired B68 must be connected to change debounce.')
+    if (!this.#device?.opened || !this.capabilities.debounce) {
+      throw new Error('Debounce is unavailable for this connection.')
     }
     if (this.#configuration.state !== 'available') {
       throw new Error('Read and validate the onboard configuration before changing debounce.')
@@ -280,8 +174,8 @@ export class KeyboardTransport extends EventTarget {
   }
 
   async applyOnboardEffect(hardwareEffectId: number): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
-      throw new Error('A wired B68 must be connected to change its onboard effect.')
+    if (!this.#device?.opened || !this.capabilities.onboardEffects) {
+      throw new Error('Onboard effects are unavailable for this connection.')
     }
     if (this.#configuration.state !== 'available') {
       throw new Error('Read and validate the onboard configuration before changing its effect.')
@@ -298,59 +192,8 @@ export class KeyboardTransport extends EventTarget {
     this.#record(`Onboard effect write verified: ID ${hardwareEffectId}`)
   }
 
-  async applyLightingLevels(speedLevel: number, brightnessLevel: number): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
-      throw new Error('A wired B68 must be connected to change lighting levels.')
-    }
-    if (this.#configuration.state !== 'available') {
-      throw new Error('Read and validate the onboard configuration before changing lighting levels.')
-    }
-    const effect = this.#configuration.value.effect
-    if (!effect?.supportsSpeed && speedLevel !== this.#configuration.value.speedLevel) {
-      throw new Error('The current onboard effect does not support speed changes.')
-    }
-    if (!effect?.supportsBrightness && brightnessLevel !== this.#configuration.value.brightnessLevel) {
-      throw new Error('The current onboard effect does not support brightness changes.')
-    }
-    const payload = buildSetConfigurationPayload(this.#configuration.value, { speedLevel, brightnessLevel })
-    this.stopLiveColor()
-    await this.#device.sendFeatureReport(6, payload)
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 60))
-    await this.inspectOnboardLighting()
-    if (this.#configuration.state !== 'available'
-      || this.#configuration.value.speedLevel !== speedLevel
-      || this.#configuration.value.brightnessLevel !== brightnessLevel) {
-      this.#record(`Lighting level readback mismatch; requested speed ${speedLevel}, brightness ${brightnessLevel}`)
-      throw new Error('The keyboard readback did not confirm the requested lighting levels.')
-    }
-    this.#record(`Lighting levels verified: speed ${speedLevel}/4, brightness ${brightnessLevel}/4`)
-  }
-
-  async applyOnboardColor(colorGroup: number): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
-      throw new Error('A wired B68 must be connected to change its onboard color.')
-    }
-    if (this.#configuration.state !== 'available') {
-      throw new Error('Read and validate the onboard configuration before changing its color.')
-    }
-    const effect = this.#configuration.value.effect
-    if (colorGroup === 7 ? !effect?.supportsRandomColor : !effect?.supportsFixedColor) {
-      throw new Error(colorGroup === 7 ? 'The current onboard effect does not support random color.' : 'The current onboard effect does not support fixed colors.')
-    }
-    const payload = buildSetConfigurationPayload(this.#configuration.value, { colorGroup })
-    this.stopLiveColor()
-    await this.#device.sendFeatureReport(6, payload)
-    await new Promise((resolve) => globalThis.setTimeout(resolve, 60))
-    await this.inspectOnboardLighting()
-    if (this.#configuration.state !== 'available' || this.#configuration.value.colorGroup !== colorGroup) {
-      this.#record(`Onboard color write readback mismatch; requested group ${colorGroup}`)
-      throw new Error('The keyboard readback did not confirm the requested onboard color.')
-    }
-    this.#record(`Onboard color write verified: group ${colorGroup}`)
-  }
-
   async inspectMatrix(layer: B68Layer): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') return
+    if (!this.#device?.opened || !this.capabilities.keymap) return
     const supportsReport6 = this.#collections.some((collection) =>
       collection.featureReports.some((report) => report.reportId === 6 && report.byteLength >= 519),
     )
@@ -386,8 +229,8 @@ export class KeyboardTransport extends EventTarget {
 
   /** Writes one complete typed layer, then requires an exact full-layer readback before accepting it. */
   async applyMatrixLayer(matrix: B68MatrixLayer): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
-      throw new Error('A wired B68 must be connected to apply a keymap.')
+    if (!this.#device?.opened || !this.capabilities.keymap) {
+      throw new Error('Key remapping is unavailable for this connection.')
     }
     const baseline = this.#matrices.get(matrix.layer)
     if (!baseline) throw new Error('Read and validate this complete keymap layer before changing it.')
@@ -412,61 +255,6 @@ export class KeyboardTransport extends EventTarget {
     this.#matrices.set(matrix.layer, readback)
     this.#record(`${matrix.layer} matrix write verified by exact 512-byte readback`)
     this.dispatchEvent(new Event('statuschange'))
-  }
-
-  async inspectMacros(): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') return
-    const pages: Uint8Array[] = []
-    try {
-      await this.#device.sendFeatureReport(6, buildGetMacroPage(0))
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
-      pages.push(parseMacroPageResponse(0, await this.#device.receiveFeatureReport(6)))
-      const header = inspectMacroArchiveHeader(pages[0])
-      const pageCount = Math.ceil(header.archiveLength / 512)
-      for (let page = 1; page < pageCount; page += 1) {
-        await this.#device.sendFeatureReport(6, buildGetMacroPage(page))
-        await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
-        pages.push(parseMacroPageResponse(page, await this.#device.receiveFeatureReport(6)))
-      }
-      const archive = new Uint8Array(pages.length * 512)
-      pages.forEach((page, index) => archive.set(page, index * 512))
-      this.#macros = decodeMacroArchive(archive.slice(0, header.archiveLength), header.macroCount)
-      this.#featureReads = [...this.#featureReads, {
-        reportId: 6,
-        result: 'ok',
-        message: `GetMacro validated; ${header.macroCount} macro(s), ${header.archiveLength} archive byte(s), ${Math.max(pageCount, 1)} page(s)`,
-      }]
-      this.#record(`Macro archive read and validated: ${header.macroCount} macro(s), ${header.archiveLength} byte(s)`)
-    } catch (error) {
-      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      this.#macros = null
-      this.#featureReads = [...this.#featureReads, { reportId: 6, result: 'error', message: `GetMacro: ${message}` }]
-      this.#record(`Macro archive read failed: ${message}`)
-    }
-    this.dispatchEvent(new Event('statuschange'))
-  }
-
-  async applyMacros(macros: readonly HardwareMacro[]): Promise<void> {
-    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
-      throw new Error('A wired B68 must be connected to write macros.')
-    }
-    if (this.#macros === null) throw new Error('Read and validate the current macro archive before changing it.')
-    const pages = buildSetMacroPages(macros)
-    if (pages.length === 0) throw new Error('Writing an empty macro archive is not supported because the native app sends no clearing page.')
-    this.stopLiveColor()
-    for (const page of pages) {
-      await this.#device.sendFeatureReport(6, page)
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 100))
-    }
-    await this.inspectMacros()
-    if (this.#macros === null) throw new Error('The macro archive could not be read back after writing.')
-    const requested = encodeMacroArchive(macros)
-    const readback = encodeMacroArchive(this.#macros)
-    if (requested.length !== readback.length || requested.some((byte, index) => byte !== readback[index])) {
-      this.#record('Macro write readback mismatch')
-      throw new Error('The keyboard macro readback did not match the requested archive.')
-    }
-    this.#record(`Macro write verified: ${macros.length} macro(s), ${requested.length} byte(s)`)
   }
 
   async setLiveColor(color: RgbColor): Promise<void> {
@@ -518,11 +306,8 @@ export class KeyboardTransport extends EventTarget {
       connected,
       knownDevice: this.#knownDevice,
       productName: this.#device?.productName ?? null,
-      firmware: connected ? this.#firmware : disconnected,
-      battery: connected && this.#knownDevice
-        ? (this.#battery.state === 'available' ? this.#battery : unsupportedBattery(this.#knownDevice.connectionType))
-        : disconnected,
       configuration: connected ? this.#configuration : disconnected,
+      capabilities: this.capabilities,
       lastRefresh: null,
     }
   }
@@ -540,6 +325,7 @@ export class KeyboardTransport extends EventTarget {
       },
       collections: this.#collections,
       vendorCollectionCount: this.vendorCollectionCount,
+      capabilities: this.capabilities,
       featureReads: this.#featureReads,
       inputReports: this.#inputReports,
       events: this.#events.slice(-25),
@@ -551,26 +337,6 @@ export class KeyboardTransport extends EventTarget {
     if (this.#events.length > 100) this.#events.shift()
   }
 
-  async #readDiagnosticFeatureReport(reportId: number): Promise<void> {
-    if (!this.#device?.opened) return
-    try {
-      const view = await this.#device.receiveFeatureReport(reportId)
-      const bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
-      this.#featureReads = [
-        ...this.#featureReads.filter((read) => read.reportId !== reportId),
-        { reportId, result: 'ok', bytes },
-      ]
-      this.#record(`Feature report ${reportId} read: ${bytes.length} byte(s)`)
-    } catch (error) {
-      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-      this.#featureReads = [
-        ...this.#featureReads.filter((read) => read.reportId !== reportId),
-        { reportId, result: 'error', message },
-      ]
-      this.#record(`Feature report ${reportId} failed: ${message}`)
-    }
-  }
-
   async #sendLiveColorFrame(): Promise<void> {
     if (!this.#device?.opened || !this.#livePayload) {
       throw new DOMException('The live RGB device is disconnected.', 'InvalidStateError')
@@ -580,13 +346,8 @@ export class KeyboardTransport extends EventTarget {
 
   #assertLiveRgbSupport(): void {
     if (!this.#device?.opened) throw new DOMException('Connect the keyboard first.', 'InvalidStateError')
-    const supportsLiveRgb = this.#collections.some((collection) =>
-      collection.featureReports.some((report) =>
-        report.reportId === LIVE_RGB_REPORT_ID && report.byteLength >= 519,
-      ),
-    )
-    if (!supportsLiveRgb) {
-      throw new DOMException('The connected interface does not expose the B68 live RGB report.', 'NotSupportedError')
+    if (!this.capabilities.liveRgb) {
+      throw new DOMException('Live RGB is not confirmed for this connection.', 'NotSupportedError')
     }
   }
 }

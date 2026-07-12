@@ -6,8 +6,6 @@ import {
   buildSetMatrixPayload,
   decodeMatrixLayer,
   decodeSemanticAssignment,
-  encodeDisabledAssignment,
-  encodeFnAssignment,
   encodeKeyboardAssignment,
   encodeMatrixLayer,
   matrixLayersEqual,
@@ -58,24 +56,19 @@ describe('B68 matrix protocol', () => {
     const assignments: MatrixAssignment[] = Array.from({ length: 128 }, () => ({ bytes: [0, 0, 0, 0] }))
     assignments[127] = { bytes: [0, 0, 0x5a, 0xa5] }
     const original = { layer: 'fn1', assignments } as const
-    const changed = replaceMatrixAssignment(original, 33, encodeKeyboardAssignment(0x02, 0x0a))
-    expect(changed.assignments[33].bytes).toEqual([0, 2, 0, 10])
+    const changed = replaceMatrixAssignment(original, 33, encodeKeyboardAssignment(0x0a))
+    expect(changed.assignments[33].bytes).toEqual([0, 0, 0, 10])
     expect(original.assignments[33].bytes).toEqual([0, 0, 0, 0])
     expect(matrixLayersEqual(original, changed)).toBe(false)
-    expect(matrixLayersEqual(changed, replaceMatrixAssignment(original, 33, encodeKeyboardAssignment(2, 10)))).toBe(true)
-    expect(() => replaceMatrixAssignment(original, 127, encodeKeyboardAssignment(0, 4))).toThrow('0 through 126')
+    expect(matrixLayersEqual(changed, replaceMatrixAssignment(original, 33, encodeKeyboardAssignment(10)))).toBe(true)
+    expect(() => replaceMatrixAssignment(original, 127, encodeKeyboardAssignment(4))).toThrow('0 through 126')
   })
 
-  it('decodes assignment forms confirmed by the Default-layer hardware capture', () => {
+  it('encodes only an unmodified keyboard key while preserving other entries as read-only labels', () => {
     expect(decodeSemanticAssignment({ bytes: [0, 0, 0, 0x04] })).toEqual({ kind: 'keyboard', modifiers: 0, usage: 0x04 })
     expect(decodeSemanticAssignment({ bytes: [0, 0x02, 0, 0] })).toEqual({ kind: 'keyboard', modifiers: 0x02, usage: 0 })
-    expect(decodeSemanticAssignment({ bytes: [0x0d, 0, 0, 0] })).toEqual({ kind: 'fn' })
-    expect(decodeSemanticAssignment({ bytes: [0x07, 0, 0, 0x14] })).toEqual({ kind: 'device-command', command: 0x14 })
-    expect(decodeSemanticAssignment({ bytes: [0x08, 3, 1, 0] })).toEqual({ kind: 'lighting-command', group: 3, value: 1, parameter: 0 })
-    expect(decodeSemanticAssignment({ bytes: [0x01, 0, 0, 0x11] })).toEqual({ kind: 'mouse-command', command: 0x11 })
-    expect(decodeSemanticAssignment({ bytes: [0x04, 0, 0, 0x22] })).toEqual({ kind: 'multimedia-command', command: 0x22 })
-    expect(encodeKeyboardAssignment(0x40, 0).bytes).toEqual([0, 0x40, 0, 0])
-    expect(encodeDisabledAssignment().bytes).toEqual([0, 0, 0, 0])
-    expect(encodeFnAssignment().bytes).toEqual([0x0d, 0, 0, 0])
+    expect(decodeSemanticAssignment({ bytes: [0x0d, 0, 0, 0] })).toEqual({ kind: 'unknown', bytes: [0x0d, 0, 0, 0] })
+    expect(encodeKeyboardAssignment(0x40).bytes).toEqual([0, 0, 0, 0x40])
+    expect(() => encodeKeyboardAssignment(0)).toThrow('nonzero')
   })
 })

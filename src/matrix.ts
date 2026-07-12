@@ -1,5 +1,4 @@
 import { LIVE_RGB_PAYLOAD_LENGTH, LIVE_RGB_REPORT_ID } from './protocol'
-import { decodeMacroAssignment, type MacroPlaybackMode } from './macro'
 
 export const B68_MATRIX_ENTRY_COUNT = 128
 export const B68_MATRIX_ENTRY_SIZE = 4
@@ -22,12 +21,6 @@ export interface B68MatrixLayer {
 export type SemanticMatrixAssignment =
   | { kind: 'disabled' }
   | { kind: 'keyboard'; modifiers: number; usage: number }
-  | { kind: 'macro'; index: number; mode: MacroPlaybackMode; repeatCount: number }
-  | { kind: 'mouse-command'; command: number }
-  | { kind: 'multimedia-command'; command: number }
-  | { kind: 'fn' }
-  | { kind: 'device-command'; command: number }
-  | { kind: 'lighting-command'; group: number; value: number; parameter: number }
   | { kind: 'crc-marker' }
   | { kind: 'unknown'; bytes: readonly [number, number, number, number] }
 
@@ -36,27 +29,14 @@ export function decodeSemanticAssignment(assignment: MatrixAssignment): Semantic
   if (type === 0 && modifiers === 0 && parameter === 0x5a && usage === 0xa5) return { kind: 'crc-marker' }
   if (type === 0 && modifiers === 0 && parameter === 0 && usage === 0) return { kind: 'disabled' }
   if (type === 0 && parameter === 0) return { kind: 'keyboard', modifiers, usage }
-  if (type === 0x03) {
-    const macro = decodeMacroAssignment(Uint8Array.from(assignment.bytes))
-    return { kind: 'macro', ...macro }
-  }
-  if (type === 0x01 && modifiers === 0 && parameter === 0) return { kind: 'mouse-command', command: usage }
-  if (type === 0x04 && modifiers === 0 && parameter === 0) return { kind: 'multimedia-command', command: usage }
-  if (type === 0x0d && modifiers === 0 && parameter === 0 && usage === 0) return { kind: 'fn' }
-  if (type === 0x07 && modifiers === 0 && parameter === 0) return { kind: 'device-command', command: usage }
-  if (type === 0x08) return { kind: 'lighting-command', group: modifiers, value: parameter, parameter: usage }
   return { kind: 'unknown', bytes: assignment.bytes }
 }
 
-export function encodeKeyboardAssignment(modifiers: number, usage: number): MatrixAssignment {
-  assertByte(modifiers)
+export function encodeKeyboardAssignment(usage: number): MatrixAssignment {
   assertByte(usage)
-  if (modifiers === 0 && usage === 0) throw new RangeError('Use a disabled assignment instead of an empty keyboard assignment.')
-  return { bytes: [0, modifiers, 0, usage] }
+  if (usage === 0) throw new RangeError('A keyboard assignment requires a nonzero HID usage.')
+  return { bytes: [0, 0, 0, usage] }
 }
-
-export function encodeDisabledAssignment(): MatrixAssignment { return { bytes: [0, 0, 0, 0] } }
-export function encodeFnAssignment(): MatrixAssignment { return { bytes: [0x0d, 0, 0, 0] } }
 
 export function replaceMatrixAssignment(
   matrix: B68MatrixLayer,

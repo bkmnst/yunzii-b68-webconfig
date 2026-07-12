@@ -30,18 +30,20 @@ export type MetricResult<T> =
   | { state: 'invalid-response'; message: string; raw: readonly number[] }
   | { state: 'disconnected'; message: string }
 
-export interface FirmwareInfo {
-  formatted: string
-}
-
 export interface DeviceStatus {
   connected: boolean
   knownDevice: KnownDevice | null
   productName: string | null
-  firmware: MetricResult<FirmwareInfo>
-  battery: MetricResult<number>
   configuration: MetricResult<B68OnboardConfiguration>
+  capabilities: DeviceCapabilities
   lastRefresh: Date | null
+}
+
+export interface DeviceCapabilities {
+  debounce: boolean
+  keymap: boolean
+  liveRgb: boolean
+  onboardEffects: boolean
 }
 
 export interface DiagnosticSnapshot {
@@ -55,6 +57,7 @@ export interface DiagnosticSnapshot {
   }
   collections: HidReportDescriptor[]
   vendorCollectionCount: number
+  capabilities: DeviceCapabilities
   featureReads: readonly {
     reportId: number
     result: 'ok' | 'error'

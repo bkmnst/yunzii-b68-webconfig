@@ -12,15 +12,10 @@ describe('semantic assignment labels', () => {
     expect(hidKeyboardUsageName(0x8f)).toBe('International 9')
   })
 
-  it('names modifier masks and special B68 assignments', () => {
+  it('labels existing modifiers but treats excluded assignment families as special', () => {
     expect(modifierMaskName(0x42)).toBe('Left Shift + Right Alt')
-    expect(assignmentLabel({ bytes: [0x0d, 0, 0, 0] })).toBe('Fn')
-    expect(assignmentLabel({ bytes: [0x07, 0, 0, 0x14] })).toBe('Mute')
-    expect(assignmentLabel({ bytes: [0x07, 0, 0, 0x05] })).toBe('Bluetooth slot 1')
-    expect(assignmentLabel({ bytes: [0x08, 3, 1, 0] })).toBe('Brightness up')
-    expect(assignmentLabel({ bytes: [0x07, 0, 0, 0x0a] })).toBe('Device command 0x0A')
-    expect(assignmentLabel({ bytes: [0x01, 0, 0, 0x16] })).toBe('Left double-click')
-    expect(assignmentLabel({ bytes: [0x04, 0, 0, 0x25] })).toBe('Next track')
+    expect(assignmentLabel({ bytes: [0x0d, 0, 0, 0] })).toBe('Special 0d 00 00 00')
+    expect(assignmentLabel({ bytes: [0x07, 0, 0, 0x14] })).toBe('Special 07 00 00 14')
     expect(assignmentLabel({ bytes: [0, 0, 0, 0] })).toBe('Disabled')
   })
 })
