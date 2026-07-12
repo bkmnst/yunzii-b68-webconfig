@@ -418,9 +418,10 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.readUsbFirmware.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired' || !navigator.usb
   ui.applyDebounce.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
   ui.applyOnboardEffect.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
-  const supportsLightingLevels = status.configuration.state === 'available' && status.knownDevice?.connectionType === 'wired'
-  ui.speedSetting.disabled = !supportsLightingLevels || !status.configuration.value.effect?.supportsSpeed
-  ui.brightnessSetting.disabled = !supportsLightingLevels || !status.configuration.value.effect?.supportsBrightness
+  const lightingConfiguration = status.configuration.state === 'available' ? status.configuration.value : null
+  const supportsLightingLevels = lightingConfiguration !== null && status.knownDevice?.connectionType === 'wired'
+  ui.speedSetting.disabled = !supportsLightingLevels || !lightingConfiguration?.effect?.supportsSpeed
+  ui.brightnessSetting.disabled = !supportsLightingLevels || !lightingConfiguration?.effect?.supportsBrightness
   ui.applyLightingLevels.disabled = !supportsLightingLevels
   ui.readMacros.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.copy.disabled = !status.connected
