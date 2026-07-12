@@ -22,6 +22,8 @@ export class KeyboardTransport extends EventTarget {
   #events: string[] = []
   #featureReads: DiagnosticSnapshot['featureReads'] = []
   #abortController: AbortController | null = null
+  #liveColor: RgbColor | null = null
+  #liveColorTimer: ReturnType<typeof setInterval> | null = null
 
   get device(): HIDDevice | null { return this.#device }
   get knownDevice(): KnownDevice | null { return this.#knownDevice }
@@ -29,6 +31,7 @@ export class KeyboardTransport extends EventTarget {
   get vendorCollectionCount(): number {
     return this.#collections.filter((collection) => collection.vendorDefined).length
   }
+  get livePreviewActive(): boolean { return this.#liveColorTimer !== null }
 
   async connect(device: HIDDevice): Promise<void> {
     const known = matchKnownDevice(device)
@@ -55,6 +58,7 @@ export class KeyboardTransport extends EventTarget {
 
   async disconnect(): Promise<void> {
     const device = this.#device
+    this.stopLiveColor()
     this.#abortController?.abort()
     this.#abortController = null
     if (device) device.oninputreport = null
@@ -68,6 +72,7 @@ export class KeyboardTransport extends EventTarget {
   }
 
   markDisconnected(): void {
+    this.stopLiveColor()
     this.#abortController?.abort()
     this.#abortController = null
     if (this.#device) this.#device.oninputreport = null
@@ -128,9 +133,30 @@ export class KeyboardTransport extends EventTarget {
       throw new DOMException('The connected interface does not expose the B68 live RGB report.', 'NotSupportedError')
     }
 
-    const payload = buildLiveRgbPayload(color)
-    await this.#device.sendFeatureReport(LIVE_RGB_REPORT_ID, payload)
-    this.#record(`Live RGB preview sent: ${color.red},${color.green},${color.blue}`)
+    this.stopLiveColor()
+    this.#liveColor = { ...color }
+    await this.#sendLiveColorFrame()
+    this.#liveColorTimer = globalThis.setInterval(() => {
+      void this.#sendLiveColorFrame().catch((error: unknown) => {
+        const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+        this.#record(`Live RGB keepalive failed: ${message}`)
+        this.stopLiveColor()
+        this.dispatchEvent(new CustomEvent('transporterror', { detail: message }))
+      })
+    }, 750)
+    this.#record(`Live RGB preview started: ${color.red},${color.green},${color.blue}`)
+    this.dispatchEvent(new Event('statuschange'))
+  }
+
+  stopLiveColor(): void {
+    if (this.#liveColorTimer !== null) globalThis.clearInterval(this.#liveColorTimer)
+    const wasActive = this.#liveColorTimer !== null || this.#liveColor !== null
+    this.#liveColorTimer = null
+    this.#liveColor = null
+    if (wasActive) {
+      this.#record('Live RGB preview stopped; waiting for onboard effect to resume')
+      this.dispatchEvent(new Event('statuschange'))
+    }
   }
 
   status(): DeviceStatus {
@@ -166,5 +192,12 @@ export class KeyboardTransport extends EventTarget {
   #record(message: string): void {
     this.#events.push(`${new Date().toISOString()} ${message}`)
     if (this.#events.length > 100) this.#events.shift()
+  }
+
+  async #sendLiveColorFrame(): Promise<void> {
+    if (!this.#device?.opened || !this.#liveColor) {
+      throw new DOMException('The live RGB device is disconnected.', 'InvalidStateError')
+    }
+    await this.#device.sendFeatureReport(LIVE_RGB_REPORT_ID, buildLiveRgbPayload(this.#liveColor))
   }
 }

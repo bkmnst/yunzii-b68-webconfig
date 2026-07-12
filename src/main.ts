@@ -59,6 +59,7 @@ app.innerHTML = `
       <div class="color-control">
         <input id="live-color" type="color" value="#c8ff43" aria-label="Live keyboard color" />
         <button id="apply-color" class="secondary" disabled>Apply live preview</button>
+        <button id="stop-color" class="secondary" disabled>Stop preview</button>
       </div>
     </section>
 
@@ -87,6 +88,7 @@ const ui = {
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   applyColor: document.querySelector<HTMLButtonElement>('#apply-color')!,
   liveColor: document.querySelector<HTMLInputElement>('#live-color')!,
+  stopColor: document.querySelector<HTMLButtonElement>('#stop-color')!,
   notice: document.querySelector<HTMLElement>('#notice')!,
   title: document.querySelector<HTMLElement>('#status-title')!,
   pill: document.querySelector<HTMLElement>('#connection-pill')!,
@@ -129,6 +131,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.refresh.disabled = !status.connected
   ui.copy.disabled = !status.connected
   ui.applyColor.disabled = !status.connected
+  ui.stopColor.disabled = !status.connected || !transport.livePreviewActive
   ui.lastRefresh.textContent = status.lastRefresh ? `Updated ${status.lastRefresh.toLocaleTimeString()}` : 'Not refreshed'
   const diagnostics = transport.diagnostics()
   ui.diagnostics.textContent = diagnostics ? JSON.stringify(diagnostics, null, 2) : 'Connect a keyboard to inspect its HID collections.'
@@ -197,13 +200,22 @@ ui.applyColor.addEventListener('click', async () => {
   ui.applyColor.disabled = true
   try {
     await transport.setLiveColor(color)
-    ui.notice.textContent = `Live RGB preview sent: ${ui.liveColor.value.toUpperCase()}.`
+    ui.notice.textContent = `Live RGB preview active: ${ui.liveColor.value.toUpperCase()}. Stop it to resume the onboard effect.`
     render()
   } catch (error) {
     ui.notice.textContent = error instanceof Error ? error.message : 'The live RGB preview failed.'
   } finally {
     ui.applyColor.disabled = !transport.status().connected
   }
+})
+ui.stopColor.addEventListener('click', () => {
+  transport.stopLiveColor()
+  ui.notice.textContent = 'Live preview stopped. The onboard hardware effect should resume automatically.'
+  render()
+})
+transport.addEventListener('transporterror', (event) => {
+  ui.notice.textContent = `Keyboard communication stopped: ${(event as CustomEvent<string>).detail}`
+  render()
 })
 transport.addEventListener('statuschange', () => render())
 

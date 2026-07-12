@@ -120,6 +120,33 @@ describe('KeyboardTransport', () => {
     expect(device.sendFeatureReport).toHaveBeenCalledTimes(1)
     expect(device.sendFeatureReport).toHaveBeenCalledWith(6, expect.any(Uint8Array))
     expect(device.sendReport).not.toHaveBeenCalled()
+    expect(transport.livePreviewActive).toBe(true)
+    transport.stopLiveColor()
+    expect(transport.livePreviewActive).toBe(false)
+  })
+
+  it('keeps direct RGB alive until stopped', async () => {
+    vi.useFakeTimers()
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00,
+        usage: 1,
+        type: 0,
+        children: [],
+        inputReports: [],
+        outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.setLiveColor({ red: 4, green: 5, blue: 6 })
+    await vi.advanceTimersByTimeAsync(1_500)
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(3)
+    transport.stopLiveColor()
+    await vi.advanceTimersByTimeAsync(1_500)
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(3)
+    vi.useRealTimers()
   })
 
   it('refuses live RGB when report 6 is unavailable', async () => {
