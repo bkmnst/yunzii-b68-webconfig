@@ -1,4 +1,5 @@
 import { LIVE_RGB_PAYLOAD_LENGTH, LIVE_RGB_REPORT_ID } from './protocol'
+import { decodeMacroAssignment, type MacroPlaybackMode } from './macro'
 
 export const B68_MATRIX_ENTRY_COUNT = 96
 export const B68_MATRIX_ENTRY_SIZE = 4
@@ -14,6 +15,34 @@ export interface MatrixAssignment {
 export interface B68MatrixLayer {
   layer: B68Layer
   assignments: readonly MatrixAssignment[]
+}
+
+export type SemanticMatrixAssignment =
+  | { kind: 'disabled' }
+  | { kind: 'keyboard'; modifiers: number; usage: number }
+  | { kind: 'macro'; index: number; mode: MacroPlaybackMode; repeatCount: number }
+  | { kind: 'fn' }
+  | { kind: 'consumer'; usage: number }
+  | { kind: 'unknown'; bytes: readonly [number, number, number, number] }
+
+export function decodeSemanticAssignment(assignment: MatrixAssignment): SemanticMatrixAssignment {
+  const [type, modifiers, parameter, usage] = assignment.bytes
+  if (type === 0 && modifiers === 0 && parameter === 0 && usage === 0) return { kind: 'disabled' }
+  if (type === 0 && parameter === 0) return { kind: 'keyboard', modifiers, usage }
+  if (type === 0x03) {
+    const macro = decodeMacroAssignment(Uint8Array.from(assignment.bytes))
+    return { kind: 'macro', ...macro }
+  }
+  if (type === 0x0d && modifiers === 0 && parameter === 0 && usage === 0) return { kind: 'fn' }
+  if (type === 0x07 && modifiers === 0 && parameter === 0) return { kind: 'consumer', usage }
+  return { kind: 'unknown', bytes: assignment.bytes }
+}
+
+export function encodeKeyboardAssignment(modifiers: number, usage: number): MatrixAssignment {
+  assertByte(modifiers)
+  assertByte(usage)
+  if (modifiers === 0 && usage === 0) throw new RangeError('Use a disabled assignment instead of an empty keyboard assignment.')
+  return { bytes: [0, modifiers, 0, usage] }
 }
 
 function layerIndex(layer: B68Layer): number {

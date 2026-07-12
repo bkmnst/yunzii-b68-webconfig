@@ -39,6 +39,8 @@ The native implementation chunks larger transfers at 512 data bytes. Read operat
 
 `SetMatrix` / `GetMatrix` are the separate command pair `0x03` / `0x83`. The selector is the zero-based layer number: Default, FN1, FN2, or Tap. The B68 matrix has 96 four-byte hardware assignments, so each layer transfer is exactly 384 bytes. Physical keys use the matrix indices recorded in `KB.ini` (1 through 95 for this layout, with unused positions retained). A strict read-query builder and response codec are implemented, and the diagnostic UI permits one explicitly selected read at a time; no arbitrary matrix bytes are exposed to the UI.
 
+The real Default-layer capture contains 67 nonzero assignments, exactly matching the 67 controls in `KB.ini`. Normal keyboard assignments are `00`, HID modifier mask, `00`, HID keyboard usage. Fn is `0D 00 00 00`; mute is consumer assignment `07 00 00 14`; unused positions are zero. These forms now decode to semantic assignment types rather than raw UI-editable bytes.
+
 The paired read command is the write command with bit 7 set. This is documented evidence, not permission to synthesize or expose arbitrary commands.
 
 ## Onboard lighting
@@ -50,6 +52,8 @@ The wired sync routine calls `GetLED` with exactly 400 bytes and retries malform
 ```
 
 The response must echo command `0x84`, selector zero, reserved zero, page 1, and length 400 before its data is accepted. Hardware diagnostics show that Chromium returns native report ID `06` as byte 0 for this B68 feature interface, even though WebHID normally supplies the report ID separately; the parser therefore accepts either framing and validates all remaining fields at the corresponding offset. The vendor sync routine additionally validates fields inside the data block; those offsets are not yet all named.
+
+A real B68 read confirms that bytes 0–127 are the active configuration record and that offsets 126–127 contain its `5A A5` validity marker. Offset 3 is debounce (captured as 1 ms, within the model's packed 1–4 ms capability). Offset 10 is the hardware lighting effect ID and offset 11 its effect parameter; the captured ID 13 maps to Rainbow wheel. The remaining 272 bytes in this capture were zero.
 
 The normal write path does **not** write the 400-byte read buffer back. It constructs a fresh 128-byte record, passes it to `SetLED`, waits 60 ms, and checks a device-state getter. Earlier analysis mistook that getter for an apply command; no separate commit packet has been established. Confirmed constructed offsets include an effect-state flag at 9, hardware effect ID at 10, another effect parameter at 11, side-light fields at 18–21, optional settings at 22–24, two `FF` sentinels at 56–57, and a sequence of packed pairs beginning at 58. The semantic names of every field still require correlation with a real response or additional static evidence.
 

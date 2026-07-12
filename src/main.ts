@@ -53,6 +53,16 @@ app.innerHTML = `
           <strong id="mode">—</strong>
           <small id="identity">No device selected</small>
         </article>
+        <article>
+          <span class="metric-label">Onboard effect</span>
+          <strong id="onboard-effect">—</strong>
+          <small id="onboard-effect-detail">Connect to inspect</small>
+        </article>
+        <article>
+          <span class="metric-label">Debounce</span>
+          <strong id="debounce">—</strong>
+          <small id="debounce-detail">Connect to inspect</small>
+        </article>
       </div>
       <div class="refresh-row">
         <button id="refresh" class="text-button" disabled>Refresh status</button>
@@ -139,6 +149,10 @@ const ui = {
   batteryDetail: document.querySelector<HTMLElement>('#battery-detail')!,
   mode: document.querySelector<HTMLElement>('#mode')!,
   identity: document.querySelector<HTMLElement>('#identity')!,
+  onboardEffect: document.querySelector<HTMLElement>('#onboard-effect')!,
+  onboardEffectDetail: document.querySelector<HTMLElement>('#onboard-effect-detail')!,
+  debounce: document.querySelector<HTMLElement>('#debounce')!,
+  debounceDetail: document.querySelector<HTMLElement>('#debounce-detail')!,
   lastRefresh: document.querySelector<HTMLElement>('#last-refresh')!,
   diagnostics: document.querySelector<HTMLElement>('#diagnostic-output')!,
 }
@@ -204,10 +218,16 @@ function describe<T>(result: MetricResult<T>, formatter: (value: T) => string): 
 function render(status: DeviceStatus = transport.status()): void {
   const [firmware, firmwareDetail] = describe(status.firmware, (value) => value.formatted)
   const [battery, batteryDetail] = describe(status.battery, (value) => `${value}%`)
+  const [onboardEffect, onboardEffectDetail] = describe(status.configuration, (value) => value.effectName)
+  const [debounce, debounceDetail] = describe(status.configuration, (value) => `${value.debounceMs} ms`)
   ui.firmware.textContent = firmware
   ui.firmwareDetail.textContent = firmwareDetail
   ui.battery.textContent = battery
   ui.batteryDetail.textContent = batteryDetail
+  ui.onboardEffect.textContent = onboardEffect
+  ui.onboardEffectDetail.textContent = onboardEffectDetail
+  ui.debounce.textContent = debounce
+  ui.debounceDetail.textContent = debounceDetail
   ui.title.textContent = status.connected ? (status.productName || status.knownDevice!.displayName) : 'Waiting for a keyboard'
   ui.pill.textContent = status.connected ? 'Connected' : 'Disconnected'
   ui.pill.classList.toggle('connected', status.connected)
@@ -263,9 +283,7 @@ async function refresh(): Promise<void> {
   ])
   await transport.inspectOnboardLighting()
   render({
-    connected: Boolean(transport.device?.opened),
-    knownDevice: transport.knownDevice,
-    productName: transport.device?.productName ?? null,
+    ...transport.status(),
     firmware,
     battery,
     lastRefresh: new Date(),

@@ -143,6 +143,10 @@ describe('KeyboardTransport', () => {
     const response = new Uint8Array(519)
     response.set([0x84, 0, 0, 1, 0, 0x90, 1])
     response.fill(0x5a, 7, 407)
+    response[7 + 3] = 1
+    response[7 + 10] = 13
+    response[7 + 126] = 0x5a
+    response[7 + 127] = 0xa5
     const device = mockDevice({
       collections: [{
         usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
@@ -160,7 +164,7 @@ describe('KeyboardTransport', () => {
     expect(transport.diagnostics()?.featureReads[0]).toMatchObject({
       reportId: 6,
       result: 'ok',
-      message: expect.stringContaining('400-byte'),
+      message: expect.stringContaining('Rainbow wheel'),
     })
   })
 

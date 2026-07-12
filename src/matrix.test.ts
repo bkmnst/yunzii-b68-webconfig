@@ -4,6 +4,8 @@ import {
   B68_MATRIX_ENTRY_COUNT,
   buildGetMatrixPayload,
   decodeMatrixLayer,
+  decodeSemanticAssignment,
+  encodeKeyboardAssignment,
   encodeMatrixLayer,
   parseMatrixResponse,
 } from './matrix'
@@ -38,5 +40,13 @@ describe('B68 matrix protocol', () => {
     const response = buildGetMatrixPayload('default')
     response[5] = 0
     expect(() => parseMatrixResponse('default', new DataView(response.buffer))).toThrow('declared')
+  })
+
+  it('decodes assignment forms confirmed by the Default-layer hardware capture', () => {
+    expect(decodeSemanticAssignment({ bytes: [0, 0, 0, 0x04] })).toEqual({ kind: 'keyboard', modifiers: 0, usage: 0x04 })
+    expect(decodeSemanticAssignment({ bytes: [0, 0x02, 0, 0] })).toEqual({ kind: 'keyboard', modifiers: 0x02, usage: 0 })
+    expect(decodeSemanticAssignment({ bytes: [0x0d, 0, 0, 0] })).toEqual({ kind: 'fn' })
+    expect(decodeSemanticAssignment({ bytes: [0x07, 0, 0, 0x14] })).toEqual({ kind: 'consumer', usage: 0x14 })
+    expect(encodeKeyboardAssignment(0x40, 0).bytes).toEqual([0, 0x40, 0, 0])
   })
 })

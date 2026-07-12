@@ -1,4 +1,5 @@
 import { allCollections, matchKnownDevice } from './devices'
+import { parseB68OnboardConfiguration, type B68OnboardConfiguration } from './configuration'
 import { buildGetMatrixPayload, parseMatrixResponse, type B68Layer } from './matrix'
 import {
   buildLiveRgbPayload,
@@ -31,6 +32,7 @@ export class KeyboardTransport extends EventTarget {
   #abortController: AbortController | null = null
   #livePayload: Uint8Array<ArrayBuffer> | null = null
   #liveColorTimer: ReturnType<typeof setInterval> | null = null
+  #configuration: MetricResult<B68OnboardConfiguration> = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
 
   get device(): HIDDevice | null { return this.#device }
   get knownDevice(): KnownDevice | null { return this.#knownDevice }
@@ -54,6 +56,7 @@ export class KeyboardTransport extends EventTarget {
     this.#collections = collections
     this.#featureReads = []
     this.#inputReports = []
+    this.#configuration = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
     this.#record(
       `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
     )
@@ -81,6 +84,7 @@ export class KeyboardTransport extends EventTarget {
     this.#collections = []
     this.#featureReads = []
     this.#inputReports = []
+    this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#record('Disconnected')
     if (device?.opened) await device.close()
     this.dispatchEvent(new Event('statuschange'))
@@ -96,6 +100,7 @@ export class KeyboardTransport extends EventTarget {
     this.#collections = []
     this.#featureReads = []
     this.#inputReports = []
+    this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#record('Device disconnected')
     this.dispatchEvent(new Event('statuschange'))
   }
@@ -173,13 +178,16 @@ export class KeyboardTransport extends EventTarget {
       const view = await this.#device.receiveFeatureReport(6)
       bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
       const lighting = parseOnboardLightingResponse(view)
+      const configuration = parseB68OnboardConfiguration(lighting)
+      this.#configuration = { state: 'available', value: configuration, raw: configuration.raw }
       this.#featureReads = [...this.#featureReads, {
         reportId: 6,
         result: 'ok',
         bytes,
-        message: `GetLED response validated; ${lighting.length}-byte onboard lighting block`,
+        message: `GetLED validated; debounce ${configuration.debounceMs} ms; effect ${configuration.effectName} (ID ${configuration.hardwareEffectId})`,
       }]
       this.#record(`GetLED report read and validated: ${lighting.length} data byte(s)`)
+      this.dispatchEvent(new Event('statuschange'))
     } catch (error) {
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       this.#featureReads = [...this.#featureReads, {
@@ -189,6 +197,8 @@ export class KeyboardTransport extends EventTarget {
         message: `GetLED: ${message}`,
       }]
       this.#record(`GetLED report failed: ${message}`)
+      this.#configuration = { state: 'invalid-response', message, raw: bytes }
+      this.dispatchEvent(new Event('statuschange'))
     }
   }
 
@@ -277,6 +287,7 @@ export class KeyboardTransport extends EventTarget {
       productName: this.#device?.productName ?? null,
       firmware: connected ? unsupportedFirmware() : disconnected,
       battery: connected && this.#knownDevice ? unsupportedBattery(this.#knownDevice.connectionType) : disconnected,
+      configuration: connected ? this.#configuration : disconnected,
       lastRefresh: null,
     }
   }

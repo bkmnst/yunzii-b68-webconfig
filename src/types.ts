@@ -1,3 +1,5 @@
+import type { B68OnboardConfiguration } from './configuration'
+
 export type ConnectionType = 'wired' | 'wireless'
 
 export interface KnownDevice {
@@ -38,6 +40,7 @@ export interface DeviceStatus {
   productName: string | null
   firmware: MetricResult<FirmwareInfo>
   battery: MetricResult<number>
+  configuration: MetricResult<B68OnboardConfiguration>
   lastRefresh: Date | null
 }
 
