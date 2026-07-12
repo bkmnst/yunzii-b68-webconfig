@@ -15,6 +15,8 @@ The WebHID picker requires vendor usage page `0xFF00`, preventing Chromium from 
 
 The app performs a read-only `receiveFeatureReport(5)` request when that report is exposed, preserving its raw response or browser error in Advanced diagnostics. Its firmware encoding is not presented as a value until independently confirmed. No arbitrary packet-sending surface is exposed.
 
+Battery percentage is decoded from the keyboard's validated unsolicited status report; acknowledgement packets and malformed values are ignored, and no guessed battery query is sent.
+
 Device identification uses the Sinowealth `0x010C` report-6 query (`82 01 00 01 00 06`), then reads report 6 and extracts the model ID from WebHID response byte 12. Wired firmware is read separately from the USB `bcdDevice` descriptor after an explicit user gesture; no USB interface is opened or claimed.
 
 Live solid-color preview uses the B68's vendor feature report 6 (`0xFF00:0x0001`, 519-byte WebHID payload). It fills the 96 LED slots established by the B68 layout map and refreshes the direct-mode frame every 750 ms. Stopping the stream lets the keyboard return to its onboard effect; no onboard profile is written.

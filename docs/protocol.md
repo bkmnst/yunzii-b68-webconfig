@@ -7,6 +7,7 @@ This document records independently recovered protocol facts from static analysi
 - Wired B68: `258A:010C`, configuration firmware family `Fw=24`.
 - Wireless dongle: `3554:FA09`; its transport remains unconfirmed.
 - The wired configuration interface uses feature report 6 with a native length of 520 bytes. WebHID passes the report ID separately and therefore exposes a 519-byte payload.
+- Its 7-byte input status report is `0A 05 <battery> 10 00 00 00`; repeated real captures reported `64` (100 percent). Subtype `07` is a write acknowledgement. The parser accepts only the complete subtype-`05` envelope and a bounded 0–100 value.
 
 ## Configuration envelope
 

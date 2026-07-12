@@ -57,6 +57,24 @@ describe('KeyboardTransport', () => {
     expect(transport.collections).toHaveLength(1)
   })
 
+  it('updates battery only from the validated unsolicited status subtype', async () => {
+    const device = mockDevice()
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    const emit = (bytes: number[]) => device.oninputreport?.({
+      device,
+      reportId: 6,
+      data: new DataView(Uint8Array.from(bytes).buffer),
+    } as HIDInputReportEvent)
+
+    emit([0x0a, 0x07, 0, 0x10, 0, 0, 0])
+    expect(transport.status().battery.state).toBe('unsupported')
+    emit([0x0a, 0x05, 87, 0x10, 0, 0, 0])
+    expect(transport.status().battery).toEqual({
+      state: 'available', value: 87, raw: [0x0a, 0x05, 87, 0x10, 0, 0, 0],
+    })
+  })
+
   it('keeps a device connected when Chromium exposes no vendor collection', async () => {
     const device = mockDevice({
       collections: [{

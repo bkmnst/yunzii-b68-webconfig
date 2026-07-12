@@ -1,4 +1,5 @@
 import { allCollections, matchKnownDevice } from './devices'
+import { parseBatteryStatusReport } from './battery'
 import { buildSetConfigurationPayload, parseB68OnboardConfiguration, type B68OnboardConfiguration } from './configuration'
 import {
   B68_MATRIX_CRC_INDEX,
@@ -52,6 +53,7 @@ export class KeyboardTransport extends EventTarget {
   #liveColorTimer: ReturnType<typeof setInterval> | null = null
   #configuration: MetricResult<B68OnboardConfiguration> = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
   #firmware: MetricResult<FirmwareInfo> = unsupportedFirmware()
+  #battery: MetricResult<number> = { state: 'unsupported', message: 'No validated battery status report has been received yet.' }
   #matrices = new Map<B68Layer, B68MatrixLayer>()
   #macros: readonly HardwareMacro[] | null = null
 
@@ -81,6 +83,7 @@ export class KeyboardTransport extends EventTarget {
     this.#inputReports = []
     this.#configuration = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
     this.#firmware = unsupportedFirmware()
+    this.#battery = { state: 'unsupported', message: 'Waiting for a validated battery status report.' }
     this.#matrices.clear()
     this.#macros = null
     this.#record(
@@ -94,6 +97,14 @@ export class KeyboardTransport extends EventTarget {
         bytes,
       }]
       this.#record(`Input report ${event.reportId}: ${event.data.byteLength} byte(s); ${bytes.map(hexByte).join(' ')}`)
+      if (event.reportId === 6) {
+        const battery = parseBatteryStatusReport(bytes)
+        if (battery !== null) {
+          this.#battery = { state: 'available', value: battery, raw: bytes }
+          this.#record(`Battery status validated: ${battery}%`)
+          this.dispatchEvent(new Event('statuschange'))
+        }
+      }
       this.dispatchEvent(new CustomEvent('inputreport', { detail: event }))
     }
     this.dispatchEvent(new Event('statuschange'))
@@ -112,6 +123,7 @@ export class KeyboardTransport extends EventTarget {
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
+    this.#battery = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
     this.#macros = null
     this.#record('Disconnected')
@@ -131,6 +143,7 @@ export class KeyboardTransport extends EventTarget {
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
+    this.#battery = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
     this.#macros = null
     this.#record('Device disconnected')
@@ -206,7 +219,7 @@ export class KeyboardTransport extends EventTarget {
     if (!this.#device?.opened || !this.#knownDevice) {
       return { state: 'disconnected', message: 'Connect the keyboard first.' }
     }
-    return unsupportedBattery(this.#knownDevice.connectionType)
+    return this.#battery.state === 'available' ? this.#battery : unsupportedBattery(this.#knownDevice.connectionType)
   }
 
   async inspectOnboardLighting(): Promise<void> {
@@ -483,7 +496,9 @@ export class KeyboardTransport extends EventTarget {
       knownDevice: this.#knownDevice,
       productName: this.#device?.productName ?? null,
       firmware: connected ? this.#firmware : disconnected,
-      battery: connected && this.#knownDevice ? unsupportedBattery(this.#knownDevice.connectionType) : disconnected,
+      battery: connected && this.#knownDevice
+        ? (this.#battery.state === 'available' ? this.#battery : unsupportedBattery(this.#knownDevice.connectionType))
+        : disconnected,
       configuration: connected ? this.#configuration : disconnected,
       lastRefresh: null,
     }
