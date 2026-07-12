@@ -29,6 +29,8 @@ All four 512-byte keymap layers can be read and decoded. The semantic remapping 
 
 Debounce can be set to the B68-supported 1–4 ms range. The operation patches only the confirmed debounce byte in a CRC-valid onboard record and requires a fresh `GetLED` readback to match before reporting success.
 
+The generic vendor driver contains a sleep timer feature for other models, but B68 leaves `ShowSleep` disabled and its Windows UI does not expose that setting. This web app likewise does not invent a B68 sleep control; record byte 3 is used for the model-enabled debounce setting.
+
 All 20 onboard effect slots from the B68 model definition can be selected persistently. Effect selection patches only the confirmed hardware-effect byte in the validated current record and likewise requires matching `GetLED` readback. The displayed vendor labels are explicitly marked as unverified because real-hardware testing found that several names do not match the observed animation; a blank slot may also require additional color/mode fields that have not yet been decoded.
 
 Supported effects expose persistent 0–4 speed and brightness controls. These patch only the model-mapped hardware fields and require matching `GetLED` readback.
