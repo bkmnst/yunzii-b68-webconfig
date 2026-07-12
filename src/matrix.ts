@@ -22,7 +22,8 @@ export type SemanticMatrixAssignment =
   | { kind: 'keyboard'; modifiers: number; usage: number }
   | { kind: 'macro'; index: number; mode: MacroPlaybackMode; repeatCount: number }
   | { kind: 'fn' }
-  | { kind: 'consumer'; usage: number }
+  | { kind: 'device-command'; command: number }
+  | { kind: 'lighting-command'; group: number; value: number; parameter: number }
   | { kind: 'unknown'; bytes: readonly [number, number, number, number] }
 
 export function decodeSemanticAssignment(assignment: MatrixAssignment): SemanticMatrixAssignment {
@@ -34,7 +35,8 @@ export function decodeSemanticAssignment(assignment: MatrixAssignment): Semantic
     return { kind: 'macro', ...macro }
   }
   if (type === 0x0d && modifiers === 0 && parameter === 0 && usage === 0) return { kind: 'fn' }
-  if (type === 0x07 && modifiers === 0 && parameter === 0) return { kind: 'consumer', usage }
+  if (type === 0x07 && modifiers === 0 && parameter === 0) return { kind: 'device-command', command: usage }
+  if (type === 0x08) return { kind: 'lighting-command', group: modifiers, value: parameter, parameter: usage }
   return { kind: 'unknown', bytes: assignment.bytes }
 }
 
