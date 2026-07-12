@@ -125,6 +125,47 @@ export function buildSetMacroPages(macros: readonly HardwareMacro[]): readonly U
   })
 }
 
+export function buildGetMacroPage(pageIndex: number): Uint8Array<ArrayBuffer> {
+  if (!Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= MACRO_PAGE_COUNT) {
+    throw new RangeError('Macro page index is out of range.')
+  }
+  const payload = new Uint8Array(new ArrayBuffer(MACRO_WIRE_PAYLOAD_LENGTH))
+  payload.set([0x85, pageIndex, 0, 0x06, 0, 0, 2])
+  return payload
+}
+
+export function parseMacroPageResponse(pageIndex: number, response: DataView): Uint8Array {
+  const bytes = new Uint8Array(response.buffer, response.byteOffset, response.byteLength)
+  const start = bytes[0] === 6 ? 1 : 0
+  if (bytes.length < start + 7 + MACRO_PAGE_SIZE) throw new RangeError('GetMacro response is too short.')
+  if (bytes[start] !== 0x85 || bytes[start + 1] !== pageIndex || bytes[start + 2] !== 0
+    || bytes[start + 3] !== 6 || bytes[start + 4] !== 0) {
+    throw new RangeError('GetMacro response header or page echo is invalid.')
+  }
+  const length = bytes[start + 5] | (bytes[start + 6] << 8)
+  if (length !== MACRO_PAGE_SIZE) throw new RangeError('GetMacro response does not contain a complete 512-byte page.')
+  return bytes.slice(start + 7, start + 7 + MACRO_PAGE_SIZE)
+}
+
+/** Infers the exact archive end from its complete descriptor table in page zero. */
+export function inspectMacroArchiveHeader(firstPage: Uint8Array): { macroCount: number; archiveLength: number } {
+  if (firstPage.length !== MACRO_PAGE_SIZE) throw new RangeError('Macro page zero must contain 512 bytes.')
+  const view = new DataView(firstPage.buffer, firstPage.byteOffset, firstPage.byteLength)
+  const firstAddress = view.getUint16(0, true)
+  if (firstAddress === 0) return { macroCount: 0, archiveLength: 0 }
+  if (firstAddress % 4 !== 0) throw new RangeError('Macro descriptor table address is not aligned.')
+  const macroCount = firstAddress / 4
+  if (macroCount < 1 || macroCount > MACRO_MAX_COUNT) throw new RangeError('Macro descriptor count is invalid.')
+  const lastDescriptor = (macroCount - 1) * 4
+  const lastAddress = view.getUint16(lastDescriptor, true)
+  const lastSize = view.getUint16(lastDescriptor + 2, true)
+  const archiveLength = lastAddress + lastSize
+  if (lastSize < 1 || archiveLength > MACRO_TRANSFER_CAPACITY || archiveLength < firstAddress) {
+    throw new RangeError('Macro archive end is invalid.')
+  }
+  return { macroCount, archiveLength }
+}
+
 /** Decodes an archive when its macro count is known from the layer matrix assignments. */
 export function decodeMacroArchive(bytes: Uint8Array, macroCount: number): readonly HardwareMacro[] {
   if (!Number.isInteger(macroCount) || macroCount < 0 || macroCount > MACRO_MAX_COUNT) throw new RangeError('Invalid macro count.')

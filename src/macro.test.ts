@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { buildSetMacroPages, decodeMacroArchive, decodeMacroAssignment, encodeMacroArchive, encodeMacroAssignment, MACRO_MAX_COUNT } from './macro'
+import {
+  buildGetMacroPage,
+  buildSetMacroPages,
+  decodeMacroArchive,
+  decodeMacroAssignment,
+  encodeMacroArchive,
+  encodeMacroAssignment,
+  inspectMacroArchiveHeader,
+  MACRO_MAX_COUNT,
+  parseMacroPageResponse,
+} from './macro'
 
 describe('macro archive codec', () => {
   it('encodes the descriptor table, UTF-16LE names, and four-byte events', () => {
@@ -53,5 +63,21 @@ describe('macro archive codec', () => {
       expect([...page.slice(0, 7)]).toEqual([5, index, 0, 6, 0, expectedLength & 0xff, expectedLength >>> 8])
       expect([...page.slice(7, 7 + expectedLength)]).toEqual([...archive.slice(index * 512, index * 512 + expectedLength)])
     })
+  })
+
+  it('builds and validates read-only macro pages and infers the archive end', () => {
+    expect([...buildGetMacroPage(2).slice(0, 7)]).toEqual([0x85, 2, 0, 6, 0, 0, 2])
+    const archive = encodeMacroArchive([
+      { name: 'A', events: [{ type: 1, delayMs: 1, value: 4 }] },
+      { name: 'B', events: [{ type: 1, delayMs: 2, value: 5 }] },
+    ])
+    const response = new Uint8Array(520)
+    response.set([6, 0x85, 0, 0, 6, 0, 0, 2])
+    response.set(archive, 8)
+    const page = parseMacroPageResponse(0, new DataView(response.buffer))
+    expect(inspectMacroArchiveHeader(page)).toEqual({ macroCount: 2, archiveLength: archive.length })
+    expect(inspectMacroArchiveHeader(new Uint8Array(512))).toEqual({ macroCount: 0, archiveLength: 0 })
+    response[2] = 1
+    expect(() => parseMacroPageResponse(0, new DataView(response.buffer))).toThrow('page echo')
   })
 })

@@ -149,6 +149,7 @@ app.innerHTML = `
           <option value="tap">Tap keymap</option>
         </select>
         <button id="inspect-matrix" class="secondary" disabled>Read selected keymap</button>
+        <button id="inspect-macros" class="secondary" disabled>Read macro archive</button>
         <button id="copy" class="secondary" disabled>Copy report</button>
       </div>
       <pre id="diagnostic-output">Connect a keyboard to inspect its HID collections.</pre>
@@ -166,6 +167,7 @@ const ui = {
   applyDebounce: document.querySelector<HTMLButtonElement>('#apply-debounce')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
+  inspectMacros: document.querySelector<HTMLButtonElement>('#inspect-macros')!,
   remapLayer: document.querySelector<HTMLSelectElement>('#remap-layer')!,
   readRemapLayer: document.querySelector<HTMLButtonElement>('#read-remap-layer')!,
   remapKey: document.querySelector<HTMLSelectElement>('#remap-key')!,
@@ -330,6 +332,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.applyDebounce.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
   ui.copy.disabled = !status.connected
   ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
+  ui.inspectMacros.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.readRemapLayer.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.stageRemap.disabled = !transport.matrix(ui.remapLayer.value as B68Layer)
   ui.applyRemap.disabled = !stagedMatrix
@@ -437,6 +440,15 @@ ui.inspectMatrix.addEventListener('click', async () => {
   renderKeymap(layer)
   render()
   ui.notice.textContent = `${layer.toUpperCase()} keymap diagnostic complete. Copy the report to share the validated result.`
+})
+ui.inspectMacros.addEventListener('click', async () => {
+  ui.inspectMacros.disabled = true
+  ui.notice.textContent = 'Reading and validating the macro archive descriptor table…'
+  await transport.inspectMacros()
+  render()
+  ui.notice.textContent = transport.macros
+    ? `Macro archive validated: ${transport.macros.length} macro${transport.macros.length === 1 ? '' : 's'}. Copy the report to share the result.`
+    : 'Macro archive validation failed; no macro write is available.'
 })
 ui.remapLayer.addEventListener('change', () => {
   stagedMatrix = null

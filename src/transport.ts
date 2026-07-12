@@ -10,6 +10,7 @@ import {
   type B68Layer,
   type B68MatrixLayer,
 } from './matrix'
+import { buildGetMacroPage, decodeMacroArchive, inspectMacroArchiveHeader, parseMacroPageResponse, type HardwareMacro } from './macro'
 import {
   buildLiveRgbPayload,
   buildIdentityQueryPayload,
@@ -44,6 +45,7 @@ export class KeyboardTransport extends EventTarget {
   #configuration: MetricResult<B68OnboardConfiguration> = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
   #firmware: MetricResult<FirmwareInfo> = unsupportedFirmware()
   #matrices = new Map<B68Layer, B68MatrixLayer>()
+  #macros: readonly HardwareMacro[] | null = null
 
   get device(): HIDDevice | null { return this.#device }
   get knownDevice(): KnownDevice | null { return this.#knownDevice }
@@ -53,6 +55,7 @@ export class KeyboardTransport extends EventTarget {
   }
   get livePreviewActive(): boolean { return this.#liveColorTimer !== null }
   matrix(layer: B68Layer): B68MatrixLayer | undefined { return this.#matrices.get(layer) }
+  get macros(): readonly HardwareMacro[] | null { return this.#macros }
 
   async connect(device: HIDDevice): Promise<void> {
     const known = matchKnownDevice(device)
@@ -71,6 +74,7 @@ export class KeyboardTransport extends EventTarget {
     this.#configuration = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
     this.#firmware = unsupportedFirmware()
     this.#matrices.clear()
+    this.#macros = null
     this.#record(
       `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
     )
@@ -101,6 +105,7 @@ export class KeyboardTransport extends EventTarget {
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
+    this.#macros = null
     this.#record('Disconnected')
     if (device?.opened) await device.close()
     this.dispatchEvent(new Event('statuschange'))
@@ -119,6 +124,7 @@ export class KeyboardTransport extends EventTarget {
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
+    this.#macros = null
     this.#record('Device disconnected')
     this.dispatchEvent(new Event('statuschange'))
   }
@@ -314,6 +320,38 @@ export class KeyboardTransport extends EventTarget {
     }
     this.#matrices.set(matrix.layer, readback)
     this.#record(`${matrix.layer} matrix write verified by exact 512-byte readback`)
+    this.dispatchEvent(new Event('statuschange'))
+  }
+
+  async inspectMacros(): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') return
+    const pages: Uint8Array[] = []
+    try {
+      await this.#device.sendFeatureReport(6, buildGetMacroPage(0))
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
+      pages.push(parseMacroPageResponse(0, await this.#device.receiveFeatureReport(6)))
+      const header = inspectMacroArchiveHeader(pages[0])
+      const pageCount = Math.ceil(header.archiveLength / 512)
+      for (let page = 1; page < pageCount; page += 1) {
+        await this.#device.sendFeatureReport(6, buildGetMacroPage(page))
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
+        pages.push(parseMacroPageResponse(page, await this.#device.receiveFeatureReport(6)))
+      }
+      const archive = new Uint8Array(pages.length * 512)
+      pages.forEach((page, index) => archive.set(page, index * 512))
+      this.#macros = decodeMacroArchive(archive.slice(0, header.archiveLength), header.macroCount)
+      this.#featureReads = [...this.#featureReads, {
+        reportId: 6,
+        result: 'ok',
+        message: `GetMacro validated; ${header.macroCount} macro(s), ${header.archiveLength} archive byte(s), ${Math.max(pageCount, 1)} page(s)`,
+      }]
+      this.#record(`Macro archive read and validated: ${header.macroCount} macro(s), ${header.archiveLength} byte(s)`)
+    } catch (error) {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      this.#macros = null
+      this.#featureReads = [...this.#featureReads, { reportId: 6, result: 'error', message: `GetMacro: ${message}` }]
+      this.#record(`Macro archive read failed: ${message}`)
+    }
     this.dispatchEvent(new Event('statuschange'))
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { encodeKeyboardAssignment, replaceMatrixAssignment, type B68MatrixLayer, type MatrixAssignment } from './matrix'
+import { encodeMacroArchive } from './macro'
 import { KeyboardTransport } from './transport'
 
 function mockDevice(overrides: Partial<HIDDevice> = {}): HIDDevice {
@@ -36,6 +37,13 @@ function configurationResponse(debounceMs: number): DataView {
   response[7 + 10] = 13
   response[7 + 126] = 0x5a
   response[7 + 127] = 0xa5
+  return new DataView(response.buffer)
+}
+
+function macroPageResponse(pageIndex: number, bytes: Uint8Array): DataView {
+  const response = new Uint8Array(519)
+  response.set([0x85, pageIndex, 0, 6, 0, 0, 2])
+  response.set(bytes.slice(pageIndex * 512, (pageIndex + 1) * 512), 7)
   return new DataView(response.buffer)
 }
 
@@ -307,6 +315,48 @@ describe('KeyboardTransport', () => {
     }
     await expect(transport.applyMatrixLayer(tampered)).rejects.toThrow('Reserved')
     await expect(transport.applyMatrixLayer(changed)).rejects.toThrow('readback did not match')
+  })
+
+  it('reads and validates only the required macro archive pages', async () => {
+    const archive = encodeMacroArchive([{ name: 'Copy', events: [
+      { type: 1, delayMs: 0, value: 0x06 }, { type: 1, delayMs: 10, value: 0x06, released: true },
+    ] }])
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn().mockResolvedValue(macroPageResponse(0, archive)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectMacros()
+
+    expect(transport.macros).toEqual([{ name: 'Copy', events: [
+      { type: 1, delayMs: 0, value: 6, released: false },
+      { type: 1, delayMs: 10, value: 6, released: true },
+    ] }])
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(1)
+    const request = vi.mocked(device.sendFeatureReport).mock.calls[0][1] as Uint8Array
+    expect([...request.slice(0, 7)]).toEqual([0x85, 0, 0, 6, 0, 0, 2])
+    expect(transport.diagnostics()?.featureReads[0].message).toContain('1 macro')
+  })
+
+  it('does not expose macros from a malformed page response', async () => {
+    const bad = new Uint8Array(519)
+    bad.set([0x85, 1, 0, 6, 0, 0, 2])
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn().mockResolvedValue(new DataView(bad.buffer)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectMacros()
+    expect(transport.macros).toBeNull()
+    expect(transport.diagnostics()?.featureReads[0]).toMatchObject({ result: 'error', message: expect.stringContaining('page echo') })
   })
 
   it('sends only the semantic live RGB feature report', async () => {
