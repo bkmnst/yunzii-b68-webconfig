@@ -6,7 +6,10 @@ describe('semantic assignment labels', () => {
     expect(hidKeyboardUsageName(0x04)).toBe('A')
     expect(hidKeyboardUsageName(0x1e)).toBe('1')
     expect(hidKeyboardUsageName(0x28)).toBe('Enter')
-    expect(hidKeyboardUsageName(0x52)).toBe('Up')
+    expect(hidKeyboardUsageName(0x52)).toBe('Up Arrow')
+    expect(hidKeyboardUsageName(0x58)).toBe('Numpad Enter')
+    expect(hidKeyboardUsageName(0x73)).toBe('F24')
+    expect(hidKeyboardUsageName(0x8f)).toBe('International 9')
   })
 
   it('names modifier masks and special B68 assignments', () => {
