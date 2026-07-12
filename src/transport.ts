@@ -1,4 +1,5 @@
 import { allCollections, matchKnownDevice } from './devices'
+import { buildGetMatrixPayload, parseMatrixResponse } from './matrix'
 import {
   buildLiveRgbPayload,
   buildIdentityQueryPayload,
@@ -188,6 +189,40 @@ export class KeyboardTransport extends EventTarget {
         message: `GetLED: ${message}`,
       }]
       this.#record(`GetLED report failed: ${message}`)
+    }
+  }
+
+  async inspectDefaultMatrix(): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') return
+    const supportsReport6 = this.#collections.some((collection) =>
+      collection.featureReports.some((report) => report.reportId === 6 && report.byteLength >= 519),
+    )
+    if (!supportsReport6) return
+
+    let bytes: number[] = []
+    try {
+      await this.#device.sendFeatureReport(6, buildGetMatrixPayload('default'))
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
+      const view = await this.#device.receiveFeatureReport(6)
+      bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
+      const matrix = parseMatrixResponse('default', view)
+      const assigned = matrix.assignments.filter((assignment) => assignment.bytes.some((byte) => byte !== 0)).length
+      this.#featureReads = [...this.#featureReads, {
+        reportId: 6,
+        result: 'ok',
+        bytes,
+        message: `GetMatrix(default) validated; ${assigned}/96 nonzero assignments`,
+      }]
+      this.#record(`Default matrix read and validated: ${assigned}/96 nonzero assignments`)
+    } catch (error) {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      this.#featureReads = [...this.#featureReads, {
+        reportId: 6,
+        result: 'error',
+        bytes,
+        message: `GetMatrix(default): ${message}`,
+      }]
+      this.#record(`Default matrix read failed: ${message}`)
     }
   }
 

@@ -95,6 +95,7 @@ app.innerHTML = `
       <summary>Advanced diagnostics <span>Descriptors only</span></summary>
       <div class="diagnostic-actions">
         <p>Useful for identifying the safe vendor-defined report channel. This information never leaves your browser.</p>
+        <button id="inspect-matrix" class="secondary" disabled>Read default keymap</button>
         <button id="copy" class="secondary" disabled>Copy report</button>
       </div>
       <pre id="diagnostic-output">Connect a keyboard to inspect its HID collections.</pre>
@@ -108,6 +109,7 @@ const ui = {
   disconnect: document.querySelector<HTMLButtonElement>('#disconnect')!,
   refresh: document.querySelector<HTMLButtonElement>('#refresh')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
+  inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
   applyColor: document.querySelector<HTMLButtonElement>('#apply-color')!,
   liveColor: document.querySelector<HTMLInputElement>('#live-color')!,
   stopColor: document.querySelector<HTMLButtonElement>('#stop-color')!,
@@ -209,6 +211,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.disconnect.hidden = !status.connected
   ui.refresh.disabled = !status.connected
   ui.copy.disabled = !status.connected
+  ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.applyColor.disabled = !status.connected
   ui.stopColor.disabled = !status.connected || !transport.livePreviewActive
   ui.paintKeys.disabled = !status.connected
@@ -270,6 +273,13 @@ ui.copy.addEventListener('click', async () => {
   if (!report) return
   await navigator.clipboard.writeText(JSON.stringify(report, null, 2))
   ui.notice.textContent = 'Diagnostic report copied. It has not been uploaded anywhere.'
+})
+ui.inspectMatrix.addEventListener('click', async () => {
+  ui.inspectMatrix.disabled = true
+  ui.notice.textContent = 'Reading and validating the Default keymap…'
+  await transport.inspectDefaultMatrix()
+  render()
+  ui.notice.textContent = 'Default keymap diagnostic complete. Copy the report to share the validated result.'
 })
 ui.applyColor.addEventListener('click', async () => {
   const hex = ui.liveColor.value.slice(1)

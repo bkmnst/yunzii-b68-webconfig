@@ -164,6 +164,29 @@ describe('KeyboardTransport', () => {
     })
   })
 
+  it('uses the confirmed read-only GetMatrix request for the default layer', async () => {
+    const response = new Uint8Array(519)
+    response.set([0x83, 0, 0, 1, 0, 0x80, 1])
+    response.fill(1, 7, 7 + 384)
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn(async () => new DataView(response.buffer)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectDefaultMatrix()
+
+    const payload = vi.mocked(device.sendFeatureReport).mock.calls[0][1] as Uint8Array
+    expect([...payload.slice(0, 7)]).toEqual([0x83, 0, 0, 1, 0, 0x80, 1])
+    expect(transport.diagnostics()?.featureReads[0]).toMatchObject({
+      result: 'ok',
+      message: expect.stringContaining('96/96'),
+    })
+  })
+
   it('sends only the semantic live RGB feature report', async () => {
     const device = mockDevice({
       collections: [{
