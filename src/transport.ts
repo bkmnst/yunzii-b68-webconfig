@@ -229,7 +229,7 @@ export class KeyboardTransport extends EventTarget {
         reportId: 6,
         result: 'ok',
         bytes,
-        message: `GetLED validated; debounce ${configuration.debounceMs} ms; effect ${configuration.effectName} (ID ${configuration.hardwareEffectId})`,
+        message: `GetLED validated; debounce ${configuration.debounceMs} ms; effect ${configuration.effectName} (ID ${configuration.hardwareEffectId}); speed ${configuration.speedLevel}/4; brightness ${configuration.brightnessLevel}/4`,
       }]
       this.#record(`GetLED report read and validated: ${lighting.length} data byte(s)`)
       this.dispatchEvent(new Event('statuschange'))
@@ -283,6 +283,34 @@ export class KeyboardTransport extends EventTarget {
       throw new Error('The keyboard readback did not confirm the requested onboard effect.')
     }
     this.#record(`Onboard effect write verified: ID ${hardwareEffectId}`)
+  }
+
+  async applyLightingLevels(speedLevel: number, brightnessLevel: number): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
+      throw new Error('A wired B68 must be connected to change lighting levels.')
+    }
+    if (this.#configuration.state !== 'available') {
+      throw new Error('Read and validate the onboard configuration before changing lighting levels.')
+    }
+    const effect = this.#configuration.value.effect
+    if (!effect?.supportsSpeed && speedLevel !== this.#configuration.value.speedLevel) {
+      throw new Error('The current onboard effect does not support speed changes.')
+    }
+    if (!effect?.supportsBrightness && brightnessLevel !== this.#configuration.value.brightnessLevel) {
+      throw new Error('The current onboard effect does not support brightness changes.')
+    }
+    const payload = buildSetConfigurationPayload(this.#configuration.value, { speedLevel, brightnessLevel })
+    this.stopLiveColor()
+    await this.#device.sendFeatureReport(6, payload)
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 60))
+    await this.inspectOnboardLighting()
+    if (this.#configuration.state !== 'available'
+      || this.#configuration.value.speedLevel !== speedLevel
+      || this.#configuration.value.brightnessLevel !== brightnessLevel) {
+      this.#record(`Lighting level readback mismatch; requested speed ${speedLevel}, brightness ${brightnessLevel}`)
+      throw new Error('The keyboard readback did not confirm the requested lighting levels.')
+    }
+    this.#record(`Lighting levels verified: speed ${speedLevel}/4, brightness ${brightnessLevel}/4`)
   }
 
   async inspectMatrix(layer: B68Layer): Promise<void> {

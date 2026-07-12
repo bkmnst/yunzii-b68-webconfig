@@ -5,12 +5,14 @@ describe('B68 onboard configuration', () => {
   it('parses fields confirmed by the real 400-byte GetLED capture', () => {
     const record = new Uint8Array(128)
     record[3] = 1
-    record[10] = 13
+    record[6] = 4
+    record[7] = 4
+    record[10] = 6
     record[11] = 0x20
     record[126] = 0x5a
     record[127] = 0xa5
     const parsed = parseB68OnboardConfiguration(record)
-    expect(parsed).toMatchObject({ debounceMs: 1, hardwareEffectId: 13, effectName: 'Rainbow wheel', effectParameter: 0x20 })
+    expect(parsed).toMatchObject({ debounceMs: 1, speedLevel: 4, brightnessLevel: 4, hardwareEffectId: 6, effectName: 'Rainbow wheel', effectParameter: 0x20 })
   })
 
   it('builds a typed SetLED record by patching only confirmed debounce byte 3', () => {
@@ -36,10 +38,28 @@ describe('B68 onboard configuration', () => {
     bytes[126] = 0x5a
     bytes[127] = 0xa5
     const baseline = parseB68OnboardConfiguration(bytes)
-    const payload = buildSetConfigurationPayload(baseline, { hardwareEffectId: 19 })
-    expect(payload[7 + 10]).toBe(19)
+    const payload = buildSetConfigurationPayload(baseline, { hardwareEffectId: 18 })
+    expect(payload[7 + 10]).toBe(18)
     expect(payload[7 + 3]).toBe(1)
     expect(() => buildSetConfigurationPayload(baseline, { hardwareEffectId: 255 })).toThrow('Unknown')
+  })
+
+  it('patches only confirmed 0–4 hardware speed and brightness bytes', () => {
+    const bytes = new Uint8Array(128)
+    bytes[3] = 1
+    bytes[6] = 4
+    bytes[7] = 4
+    bytes[10] = 6
+    bytes[126] = 0x5a
+    bytes[127] = 0xa5
+    const baseline = parseB68OnboardConfiguration(bytes)
+    const payload = buildSetConfigurationPayload(baseline, { speedLevel: 2, brightnessLevel: 3 })
+    expect(payload[7 + 6]).toBe(2)
+    expect(payload[7 + 7]).toBe(3)
+    expect([...payload.slice(7, 13)]).toEqual([...bytes.slice(0, 6)])
+    expect([...payload.slice(15, 135)]).toEqual([...bytes.slice(8)])
+    expect(() => buildSetConfigurationPayload(baseline, { speedLevel: 5 })).toThrow('speed level')
+    expect(() => buildSetConfigurationPayload(baseline, { brightnessLevel: -1 })).toThrow('brightness level')
   })
 
   it('rejects bad markers and debounce bounds while preserving unknown effects', () => {

@@ -7,7 +7,10 @@ describe('B68 lighting effects', () => {
       Array.from({ length: 20 }, (_, index) => index + 1),
     )
     expect(B68_LIGHTING_EFFECTS.map((effect) => effect.hardwareId)).toEqual([
-      1, 3, 2, 19, 15, 13, 20, 16, 18, 5, 7, 17, 12, 8, 28, 30, 14, 29, 21, 0,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 0,
+    ])
+    expect(B68_LIGHTING_EFFECTS.map((effect) => effect.previewAnimationId)).toEqual([
+      1, 3, 2, 19, 15, 13, 20, 16, 18, 5, 7, 17, 12, 8, 28, 30, 14, 29, 0, 0,
     ])
   })
 
@@ -16,7 +19,7 @@ describe('B68 lighting effects', () => {
       name: 'Fixed on', supportsSpeed: false, supportsBrightness: true, supportsFixedColor: true,
     })
     expect(effectByHardwareId(2)).toMatchObject({
-      name: 'Rainbow', supportsSpeed: true, supportsRandomColor: false, supportsFixedColor: false,
+      name: 'Respire', supportsSpeed: true, supportsRandomColor: true, supportsFixedColor: true,
     })
     expect(effectByHardwareId(0)).toMatchObject({
       name: 'Off', supportsSpeed: false, supportsBrightness: false,

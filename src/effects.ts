@@ -1,6 +1,7 @@
 export interface LightingEffect {
   appIndex: number
   hardwareId: number
+  previewAnimationId: number
   name: string
   supportsSpeed: boolean
   supportsBrightness: boolean
@@ -11,7 +12,7 @@ export interface LightingEffect {
 
 function effect(
   appIndex: number,
-  hardwareId: number,
+  previewAnimationId: number,
   name: string,
   speed: number,
   brightness: number,
@@ -21,7 +22,8 @@ function effect(
 ): LightingEffect {
   return Object.freeze({
     appIndex,
-    hardwareId,
+    hardwareId: appIndex === 20 ? 0 : appIndex === 19 ? 21 : appIndex,
+    previewAnimationId,
     name,
     supportsSpeed: Boolean(speed),
     supportsBrightness: Boolean(brightness),
@@ -51,7 +53,7 @@ export const B68_LIGHTING_EFFECTS: readonly LightingEffect[] = Object.freeze([
   effect(16, 30, 'Colorful waterfall', 1, 1, 0, 0, 0),
   effect(17, 14, 'Blossoming', 1, 1, 0, 0, 0),
   effect(18, 29, 'Rotating storm', 1, 1, 0, 1, 1),
-  effect(19, 21, 'Self-define', 0, 0, 0, 0, 0),
+  effect(19, 0, 'Self-define', 0, 0, 0, 0, 0),
   effect(20, 0, 'Off', 0, 0, 0, 0, 0),
 ])
 

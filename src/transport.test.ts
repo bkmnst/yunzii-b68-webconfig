@@ -30,10 +30,12 @@ function matrixResponse(matrix: B68MatrixLayer): DataView {
   return new DataView(response.buffer)
 }
 
-function configurationResponse(debounceMs: number, hardwareEffectId = 13): DataView {
+function configurationResponse(debounceMs: number, hardwareEffectId = 13, speedLevel = 4, brightnessLevel = 4): DataView {
   const response = new Uint8Array(519)
   response.set([0x84, 0, 0, 1, 0, 0x90, 1])
   response[7 + 3] = debounceMs
+  response[7 + 6] = speedLevel
+  response[7 + 7] = brightnessLevel
   response[7 + 10] = hardwareEffectId
   response[7 + 126] = 0x5a
   response[7 + 127] = 0xa5
@@ -181,6 +183,8 @@ describe('KeyboardTransport', () => {
     response.set([0x84, 0, 0, 1, 0, 0x90, 1])
     response.fill(0x5a, 7, 407)
     response[7 + 3] = 1
+    response[7 + 6] = 4
+    response[7 + 7] = 4
     response[7 + 10] = 13
     response[7 + 126] = 0x5a
     response[7 + 127] = 0xa5
@@ -201,7 +205,7 @@ describe('KeyboardTransport', () => {
     expect(transport.diagnostics()?.featureReads[0]).toMatchObject({
       reportId: 6,
       result: 'ok',
-      message: expect.stringContaining('Rainbow wheel'),
+      message: expect.stringContaining('Sine wave'),
     })
   })
 
@@ -250,18 +254,58 @@ describe('KeyboardTransport', () => {
       }],
       receiveFeatureReport: vi.fn()
         .mockResolvedValueOnce(configurationResponse(1, 13))
-        .mockResolvedValueOnce(configurationResponse(1, 19)),
+        .mockResolvedValueOnce(configurationResponse(1, 18)),
     })
     const transport = new KeyboardTransport()
     await transport.connect(device)
     await transport.inspectOnboardLighting()
-    await transport.applyOnboardEffect(19)
+    await transport.applyOnboardEffect(18)
 
     const payload = vi.mocked(device.sendFeatureReport).mock.calls[1][1] as Uint8Array
     expect([...payload.slice(0, 7)]).toEqual([4, 0, 0, 1, 0, 128, 0])
     expect(payload[7 + 3]).toBe(1)
-    expect(payload[7 + 10]).toBe(19)
-    expect(transport.status().configuration).toMatchObject({ state: 'available', value: { hardwareEffectId: 19 } })
+    expect(payload[7 + 10]).toBe(18)
+    expect(transport.status().configuration).toMatchObject({ state: 'available', value: { hardwareEffectId: 18 } })
+  })
+
+  it('changes only typed speed and brightness levels and requires matching readback', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn()
+        .mockResolvedValueOnce(configurationResponse(1, 13, 4, 4))
+        .mockResolvedValueOnce(configurationResponse(1, 13, 2, 3)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectOnboardLighting()
+    await transport.applyLightingLevels(2, 3)
+
+    const payload = vi.mocked(device.sendFeatureReport).mock.calls[1][1] as Uint8Array
+    expect(payload[7 + 6]).toBe(2)
+    expect(payload[7 + 7]).toBe(3)
+    expect(payload[7 + 3]).toBe(1)
+    expect(payload[7 + 10]).toBe(13)
+    expect(transport.status().configuration).toMatchObject({
+      state: 'available', value: { speedLevel: 2, brightnessLevel: 3 },
+    })
+  })
+
+  it('refuses unsupported lighting-level changes for the current effect', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn().mockResolvedValue(configurationResponse(1, 1, 4, 4)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectOnboardLighting()
+    await expect(transport.applyLightingLevels(3, 4)).rejects.toThrow('does not support speed')
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(1)
   })
 
   it('uses the confirmed read-only GetMatrix request for the default layer', async () => {

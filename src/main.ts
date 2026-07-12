@@ -86,6 +86,9 @@ app.innerHTML = `
       <div class="profile-controls hardware-controls">
         <label>Onboard effect <select id="onboard-effect-setting"></select></label>
         <button id="apply-onboard-effect" class="secondary" disabled>Apply and verify effect</button>
+        <label>Effect speed <select id="speed-setting"><option value="0">0 / 4</option><option value="1">1 / 4</option><option value="2">2 / 4</option><option value="3">3 / 4</option><option value="4">4 / 4</option></select></label>
+        <label>Brightness <select id="brightness-setting"><option value="0">0 / 4</option><option value="1">1 / 4</option><option value="2">2 / 4</option><option value="3">3 / 4</option><option value="4">4 / 4</option></select></label>
+        <button id="apply-lighting-levels" class="secondary" disabled>Apply and verify levels</button>
         <label>Debounce <select id="debounce-setting"><option value="1">1 ms</option><option value="2">2 ms</option><option value="3">3 ms</option><option value="4">4 ms</option></select></label>
         <button id="apply-debounce" class="secondary" disabled>Apply and verify debounce</button>
       </div>
@@ -192,6 +195,9 @@ const ui = {
   readUsbFirmware: document.querySelector<HTMLButtonElement>('#read-usb-firmware')!,
   debounceSetting: document.querySelector<HTMLSelectElement>('#debounce-setting')!,
   applyDebounce: document.querySelector<HTMLButtonElement>('#apply-debounce')!,
+  speedSetting: document.querySelector<HTMLSelectElement>('#speed-setting')!,
+  brightnessSetting: document.querySelector<HTMLSelectElement>('#brightness-setting')!,
+  applyLightingLevels: document.querySelector<HTMLButtonElement>('#apply-lighting-levels')!,
   onboardEffectSetting: document.querySelector<HTMLSelectElement>('#onboard-effect-setting')!,
   applyOnboardEffect: document.querySelector<HTMLButtonElement>('#apply-onboard-effect')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
@@ -396,6 +402,8 @@ function render(status: DeviceStatus = transport.status()): void {
   if (status.configuration.state === 'available') {
     ui.debounceSetting.value = String(status.configuration.value.debounceMs)
     ui.onboardEffectSetting.value = String(status.configuration.value.hardwareEffectId)
+    ui.speedSetting.value = String(status.configuration.value.speedLevel)
+    ui.brightnessSetting.value = String(status.configuration.value.brightnessLevel)
   }
   ui.title.textContent = status.connected ? (status.productName || status.knownDevice!.displayName) : 'Waiting for a keyboard'
   ui.pill.textContent = status.connected ? 'Connected' : 'Disconnected'
@@ -410,6 +418,10 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.readUsbFirmware.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired' || !navigator.usb
   ui.applyDebounce.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
   ui.applyOnboardEffect.disabled = status.configuration.state !== 'available' || status.knownDevice?.connectionType !== 'wired'
+  const supportsLightingLevels = status.configuration.state === 'available' && status.knownDevice?.connectionType === 'wired'
+  ui.speedSetting.disabled = !supportsLightingLevels || !status.configuration.value.effect?.supportsSpeed
+  ui.brightnessSetting.disabled = !supportsLightingLevels || !status.configuration.value.effect?.supportsBrightness
+  ui.applyLightingLevels.disabled = !supportsLightingLevels
   ui.readMacros.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.copy.disabled = !status.connected
   ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
@@ -494,6 +506,19 @@ ui.applyOnboardEffect.addEventListener('click', async () => {
     ui.notice.textContent = `${effect?.name ?? 'Onboard effect'} applied and verified.`
   } catch (error) {
     ui.notice.textContent = error instanceof Error ? error.message : 'The onboard effect was not verified.'
+  }
+  render()
+})
+ui.applyLightingLevels.addEventListener('click', async () => {
+  const speedLevel = Number(ui.speedSetting.value)
+  const brightnessLevel = Number(ui.brightnessSetting.value)
+  ui.applyLightingLevels.disabled = true
+  ui.notice.textContent = `Applying speed ${speedLevel}/4 and brightness ${brightnessLevel}/4 with hardware verification…`
+  try {
+    await transport.applyLightingLevels(speedLevel, brightnessLevel)
+    ui.notice.textContent = `Speed ${speedLevel}/4 and brightness ${brightnessLevel}/4 applied and verified.`
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The lighting levels were not verified.'
   }
   render()
 })
