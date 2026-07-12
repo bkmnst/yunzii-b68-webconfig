@@ -55,6 +55,14 @@ The B68 definition supplies 20 ordered effect entries and five capability flags 
 
 The write path also builds a separate 512-byte RGB table and calls the vtable method at offset `0x70` (`SetLedRgbTab`, command `0x0A`). It places the validity bytes `5A A5` at table offsets 506 and 507. The table contains groups of RGB triplets assembled from the application model. This table is not the same packet as live RGB report command `0x08`.
 
+## Macro archive
+
+Static analysis of `FillMatrix` and `StMacro_To_HdMacro` confirms that the macro transfer is a variable-length archive capped at `0x2800` (10,240) bytes. It contains at most 100 four-byte descriptors followed by up to `0x2000` bytes of packed records. Each descriptor is a little-endian `u16` address and `u16` size. Addresses are adjusted to follow the complete descriptor table.
+
+A record begins with a one-byte UTF-16LE name byte length and the name bytes. The remaining bytes are four-byte events: `(type << 4) | delay[19:16]`, `delay[15:8]`, `delay[7:0]`, and an event value. Delays are capped at `0xFFFFF`. Event types 1 through 5 represent keyboard, mouse-button, and three pointer/wheel forms; for type 1, bit 7 marks key release. The layer matrix uses action type `0x05` and references these records by a one-based internal buffer ID.
+
+The on-device four-byte key assignment is `03`, a playback flag (`01`, `02`, or `04`), repeat count, and zero-based macro index. The first playback setting uses the configured repeat count; the other two force that byte to one. The source includes strict offline codecs for both this assignment and the confirmed archive format. Macro writes remain disconnected from the WebHID transport until the three playback settings have semantic labels and the complete matrix readback path is validated.
+
 ## Firmware and battery
 
 The Windows app obtains its displayed USB firmware value from `HidD_GetAttributes().VersionNumber`, not from a B68 vendor query. WebHID does not expose that field. Report-6 model identity is useful device evidence but must not be labeled as firmware.
