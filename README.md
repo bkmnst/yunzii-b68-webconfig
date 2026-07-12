@@ -35,6 +35,8 @@ All 20 onboard effect slots from the B68 model definition can be selected persis
 
 Supported effects expose persistent 0–4 speed and brightness controls. These patch only the model-mapped hardware fields and require matching `GetLED` readback.
 
+Effects with matching model capabilities also expose the native onboard palette (red, green, blue, cyan, yellow, magenta, white) and random-color mode. Color changes patch only the confirmed group byte and require matching readback.
+
 The macro editor can build and revise named keyboard and mouse sequences with per-event delays, including five mouse buttons, signed X/Y movement, and wheel movement. Events can be reordered or removed; writes use the typed paged archive and require a complete decoded byte-for-byte readback. Verified macros can then be assigned to keys with fixed-count, until-release, or until-any-key playback. Clearing the final macro remains disabled because the native zero-length path sends no clearing page.
 
 ## Safety boundary

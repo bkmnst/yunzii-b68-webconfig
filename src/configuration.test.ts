@@ -12,13 +12,14 @@ describe('B68 onboard configuration', () => {
     record[126] = 0x5a
     record[127] = 0xa5
     const parsed = parseB68OnboardConfiguration(record)
-    expect(parsed).toMatchObject({ debounceMs: 1, speedLevel: 4, brightnessLevel: 4, hardwareEffectId: 6, effectName: 'Effect slot 6 (ID 6)', effectParameter: 0x20 })
+    expect(parsed).toMatchObject({ debounceMs: 1, speedLevel: 4, brightnessLevel: 4, hardwareEffectId: 6, effectName: 'Effect slot 6 (ID 6)', effectParameter: 0x20, colorGroup: 0, colorName: 'Red' })
   })
 
   it('builds a typed SetLED record by patching only confirmed debounce byte 3', () => {
     const bytes = new Uint8Array(128)
     bytes[3] = 1
     bytes[10] = 13
+    bytes[11] = 0x20
     bytes[126] = 0x5a
     bytes[127] = 0xa5
     const baseline = parseB68OnboardConfiguration(bytes)
@@ -35,6 +36,7 @@ describe('B68 onboard configuration', () => {
     const bytes = new Uint8Array(128)
     bytes[3] = 1
     bytes[10] = 13
+    bytes[11] = 0x20
     bytes[126] = 0x5a
     bytes[127] = 0xa5
     const baseline = parseB68OnboardConfiguration(bytes)
@@ -50,6 +52,7 @@ describe('B68 onboard configuration', () => {
     bytes[6] = 4
     bytes[7] = 4
     bytes[10] = 6
+    bytes[11] = 0x20
     bytes[126] = 0x5a
     bytes[127] = 0xa5
     const baseline = parseB68OnboardConfiguration(bytes)
@@ -62,16 +65,31 @@ describe('B68 onboard configuration', () => {
     expect(() => buildSetConfigurationPayload(baseline, { brightnessLevel: -1 })).toThrow('brightness level')
   })
 
+  it('encodes the native fixed and random color groups at record offset 11', () => {
+    const bytes = new Uint8Array(128)
+    bytes[3] = 1
+    bytes[10] = 6
+    bytes[11] = 0x20
+    bytes[126] = 0x5a
+    bytes[127] = 0xa5
+    const baseline = parseB68OnboardConfiguration(bytes)
+    expect(buildSetConfigurationPayload(baseline, { colorGroup: 6 })[7 + 11]).toBe(0x26)
+    expect(buildSetConfigurationPayload(baseline, { colorGroup: 7 })[7 + 11]).toBe(0x27)
+    expect(() => buildSetConfigurationPayload(baseline, { colorGroup: 8 })).toThrow('0 to 7')
+  })
+
   it('rejects bad markers and debounce bounds while preserving unknown effects', () => {
     const record = new Uint8Array(128)
     record[3] = 1
     record[10] = 13
+    record[11] = 0x20
     expect(() => parseB68OnboardConfiguration(record)).toThrow('marker')
     record[126] = 0x5a
     record[127] = 0xa5
     record[3] = 5
     expect(() => parseB68OnboardConfiguration(record)).toThrow('debounce')
     record[3] = 1
+    record[11] = 0x20
     record[10] = 0xff
     expect(parseB68OnboardConfiguration(record).effectName).toBe('Unknown effect 255')
   })
@@ -79,6 +97,7 @@ describe('B68 onboard configuration', () => {
   it('resolves hardware effect ID zero to the vendor Off slot', () => {
     const record = new Uint8Array(128)
     record[3] = 1
+    record[11] = 0x20
     record[126] = 0x5a
     record[127] = 0xa5
     expect(parseB68OnboardConfiguration(record)).toMatchObject({ effect: { name: 'Effect slot 20 (ID 0)', vendorLabel: 'Off' }, effectName: 'Effect slot 20 (ID 0)' })

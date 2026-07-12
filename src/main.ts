@@ -25,6 +25,7 @@ import type { DeviceStatus, MetricResult } from './types'
 import { B68_WIRED_PRODUCT_ID, B68_WIRED_VENDOR_ID, firmwareFromUsbDescriptor } from './usb-firmware'
 import { encodeSafeSpecialAssignment, LIGHTING_ASSIGNMENTS, SAFE_DEVICE_ASSIGNMENTS } from './special-assignments'
 import { B68_LIGHTING_EFFECTS } from './effects'
+import { B68_ONBOARD_COLORS } from './configuration'
 import { encodeMacroAssignment, type HardwareMacro, type HardwareMacroEvent, type MacroPlaybackMode } from './macro'
 import { encodeDirectAssignment, MOUSE_ASSIGNMENTS, MULTIMEDIA_ASSIGNMENTS } from './direct-assignments'
 
@@ -87,6 +88,8 @@ app.innerHTML = `
       <div class="profile-controls hardware-controls">
         <label>Onboard effect <select id="onboard-effect-setting"></select></label>
         <button id="apply-onboard-effect" class="secondary" disabled>Apply and verify effect</button>
+        <label>Onboard color <select id="onboard-color-setting"></select></label>
+        <button id="apply-onboard-color" class="secondary" disabled>Apply and verify color</button>
         <label>Effect speed <select id="speed-setting"><option value="0">0 / 4</option><option value="1">1 / 4</option><option value="2">2 / 4</option><option value="3">3 / 4</option><option value="4">4 / 4</option></select></label>
         <label>Brightness <select id="brightness-setting"><option value="0">0 / 4</option><option value="1">1 / 4</option><option value="2">2 / 4</option><option value="3">3 / 4</option><option value="4">4 / 4</option></select></label>
         <button id="apply-lighting-levels" class="secondary" disabled>Apply and verify levels</button>
@@ -206,6 +209,8 @@ const ui = {
   applyLightingLevels: document.querySelector<HTMLButtonElement>('#apply-lighting-levels')!,
   onboardEffectSetting: document.querySelector<HTMLSelectElement>('#onboard-effect-setting')!,
   applyOnboardEffect: document.querySelector<HTMLButtonElement>('#apply-onboard-effect')!,
+  onboardColorSetting: document.querySelector<HTMLSelectElement>('#onboard-color-setting')!,
+  applyOnboardColor: document.querySelector<HTMLButtonElement>('#apply-onboard-color')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
   inspectMacros: document.querySelector<HTMLButtonElement>('#inspect-macros')!,
@@ -292,6 +297,8 @@ for (const effect of B68_LIGHTING_EFFECTS) {
     String(effect.hardwareId),
   ))
 }
+for (const color of B68_ONBOARD_COLORS) ui.onboardColorSetting.add(new Option(color.name, String(color.group)))
+ui.onboardColorSetting.add(new Option('Random', '7'))
 
 for (const layer of B68_LAYERS) ui.remapLayer.add(new Option(layer.toUpperCase(), layer))
 for (const key of B68_KEYS) ui.remapKey.add(new Option(key.label, String(key.ledIndex)))
@@ -475,6 +482,7 @@ function render(status: DeviceStatus = transport.status()): void {
     ui.onboardEffectSetting.value = String(status.configuration.value.hardwareEffectId)
     ui.speedSetting.value = String(status.configuration.value.speedLevel)
     ui.brightnessSetting.value = String(status.configuration.value.brightnessLevel)
+    ui.onboardColorSetting.value = String(status.configuration.value.colorGroup)
   }
   ui.title.textContent = status.connected ? (status.productName || status.knownDevice!.displayName) : 'Waiting for a keyboard'
   ui.pill.textContent = status.connected ? 'Connected' : 'Disconnected'
@@ -493,6 +501,12 @@ function render(status: DeviceStatus = transport.status()): void {
   const supportsLightingLevels = lightingConfiguration !== null && status.knownDevice?.connectionType === 'wired'
   ui.speedSetting.disabled = !supportsLightingLevels || !lightingConfiguration?.effect?.supportsSpeed
   ui.brightnessSetting.disabled = !supportsLightingLevels || !lightingConfiguration?.effect?.supportsBrightness
+  const selectedColorGroup = Number(ui.onboardColorSetting.value)
+  const supportsSelectedColor = selectedColorGroup === 7
+    ? Boolean(lightingConfiguration?.effect?.supportsRandomColor)
+    : Boolean(lightingConfiguration?.effect?.supportsFixedColor)
+  ui.onboardColorSetting.disabled = !lightingConfiguration
+  ui.applyOnboardColor.disabled = status.knownDevice?.connectionType !== 'wired' || !supportsSelectedColor
   ui.applyLightingLevels.disabled = !supportsLightingLevels
   ui.readMacros.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.copy.disabled = !status.connected
@@ -578,6 +592,20 @@ ui.applyOnboardEffect.addEventListener('click', async () => {
     ui.notice.textContent = `${effect?.name ?? 'Onboard effect'} applied and verified.`
   } catch (error) {
     ui.notice.textContent = error instanceof Error ? error.message : 'The onboard effect was not verified.'
+  }
+  render()
+})
+ui.onboardColorSetting.addEventListener('change', render)
+ui.applyOnboardColor.addEventListener('click', async () => {
+  const colorGroup = Number(ui.onboardColorSetting.value)
+  const label = colorGroup === 7 ? 'Random' : B68_ONBOARD_COLORS.find((color) => color.group === colorGroup)?.name ?? `group ${colorGroup}`
+  ui.applyOnboardColor.disabled = true
+  ui.notice.textContent = `Applying onboard color ${label} and verifying hardware readback…`
+  try {
+    await transport.applyOnboardColor(colorGroup)
+    ui.notice.textContent = `Onboard color ${label} applied and verified.`
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The onboard color was not verified.'
   }
   render()
 })

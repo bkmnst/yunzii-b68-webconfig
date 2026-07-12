@@ -326,6 +326,29 @@ export class KeyboardTransport extends EventTarget {
     this.#record(`Lighting levels verified: speed ${speedLevel}/4, brightness ${brightnessLevel}/4`)
   }
 
+  async applyOnboardColor(colorGroup: number): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
+      throw new Error('A wired B68 must be connected to change its onboard color.')
+    }
+    if (this.#configuration.state !== 'available') {
+      throw new Error('Read and validate the onboard configuration before changing its color.')
+    }
+    const effect = this.#configuration.value.effect
+    if (colorGroup === 7 ? !effect?.supportsRandomColor : !effect?.supportsFixedColor) {
+      throw new Error(colorGroup === 7 ? 'The current onboard effect does not support random color.' : 'The current onboard effect does not support fixed colors.')
+    }
+    const payload = buildSetConfigurationPayload(this.#configuration.value, { colorGroup })
+    this.stopLiveColor()
+    await this.#device.sendFeatureReport(6, payload)
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 60))
+    await this.inspectOnboardLighting()
+    if (this.#configuration.state !== 'available' || this.#configuration.value.colorGroup !== colorGroup) {
+      this.#record(`Onboard color write readback mismatch; requested group ${colorGroup}`)
+      throw new Error('The keyboard readback did not confirm the requested onboard color.')
+    }
+    this.#record(`Onboard color write verified: group ${colorGroup}`)
+  }
+
   async inspectMatrix(layer: B68Layer): Promise<void> {
     if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') return
     const supportsReport6 = this.#collections.some((collection) =>

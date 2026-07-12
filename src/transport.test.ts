@@ -37,6 +37,7 @@ function configurationResponse(debounceMs: number, hardwareEffectId = 13, speedL
   response[7 + 6] = speedLevel
   response[7 + 7] = brightnessLevel
   response[7 + 10] = hardwareEffectId
+  response[7 + 11] = 0x20
   response[7 + 126] = 0x5a
   response[7 + 127] = 0xa5
   return new DataView(response.buffer)
@@ -204,6 +205,7 @@ describe('KeyboardTransport', () => {
     response[7 + 6] = 4
     response[7 + 7] = 4
     response[7 + 10] = 13
+    response[7 + 11] = 0x20
     response[7 + 126] = 0x5a
     response[7 + 127] = 0xa5
     const device = mockDevice({
@@ -324,6 +326,27 @@ describe('KeyboardTransport', () => {
     await transport.inspectOnboardLighting()
     await expect(transport.applyLightingLevels(3, 4)).rejects.toThrow('does not support speed')
     expect(device.sendFeatureReport).toHaveBeenCalledTimes(1)
+  })
+
+  it('changes only an effect-supported onboard color group and requires readback', async () => {
+    const initial = configurationResponse(1, 6)
+    const changed = configurationResponse(1, 6)
+    new Uint8Array(changed.buffer)[7 + 11] = 0x27
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(changed),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectOnboardLighting()
+    expect(transport.status().configuration).toMatchObject({ state: 'available', value: { colorGroup: 0 } })
+    await transport.applyOnboardColor(7)
+    const payload = vi.mocked(device.sendFeatureReport).mock.calls[1][1] as Uint8Array
+    expect(payload[7 + 11]).toBe(0x27)
+    expect(transport.status().configuration).toMatchObject({ state: 'available', value: { colorGroup: 7, colorName: 'Random' } })
   })
 
   it('uses the confirmed read-only GetMatrix request for the default layer', async () => {
