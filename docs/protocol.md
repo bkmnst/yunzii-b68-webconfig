@@ -41,6 +41,8 @@ The native implementation chunks larger transfers at 512 data bytes. Read operat
 
 The real Default-layer capture contains 67 nonzero assignments, exactly matching the 67 controls in `KB.ini`. Normal keyboard assignments are `00`, HID modifier mask, `00`, HID keyboard usage. Fn is `0D 00 00 00`; mute is consumer assignment `07 00 00 14`; unused positions are zero. These forms now decode to semantic assignment types rather than raw UI-editable bytes.
 
+The matching typed `SetMatrix` constructor uses command `03`, the same fixed layer selector, page 1, declared length 384, and a complete encoded layer. It is implemented as an offline constructor but is not connected to UI transport until edits can be followed by an immediate validated `GetMatrix` readback.
+
 The paired read command is the write command with bit 7 set. This is documented evidence, not permission to synthesize or expose arbitrary commands.
 
 ## Onboard lighting

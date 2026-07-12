@@ -62,6 +62,14 @@ export function buildGetMatrixPayload(layer: B68Layer): Uint8Array<ArrayBuffer> 
   return payload
 }
 
+/** Builds one complete, typed SetMatrix (0x03) payload; it is not a raw-send API. */
+export function buildSetMatrixPayload(matrix: B68MatrixLayer): Uint8Array<ArrayBuffer> {
+  const payload = new Uint8Array(new ArrayBuffer(LIVE_RGB_PAYLOAD_LENGTH))
+  payload.set([0x03, layerIndex(matrix.layer), 0, 1, 0, B68_MATRIX_BYTE_LENGTH & 0xff, B68_MATRIX_BYTE_LENGTH >>> 8])
+  payload.set(encodeMatrixLayer(matrix), 7)
+  return payload
+}
+
 export function encodeMatrixLayer(matrix: B68MatrixLayer): Uint8Array {
   if (matrix.assignments.length !== B68_MATRIX_ENTRY_COUNT) throw new RangeError(`A B68 matrix layer must contain ${B68_MATRIX_ENTRY_COUNT} assignments.`)
   const result = new Uint8Array(B68_MATRIX_BYTE_LENGTH)

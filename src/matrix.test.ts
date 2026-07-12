@@ -3,6 +3,7 @@ import {
   B68_MATRIX_BYTE_LENGTH,
   B68_MATRIX_ENTRY_COUNT,
   buildGetMatrixPayload,
+  buildSetMatrixPayload,
   decodeMatrixLayer,
   decodeSemanticAssignment,
   encodeKeyboardAssignment,
@@ -24,6 +25,10 @@ describe('B68 matrix protocol', () => {
     const encoded = encodeMatrixLayer({ layer: 'default', assignments })
     expect(encoded).toHaveLength(B68_MATRIX_BYTE_LENGTH)
     expect(decodeMatrixLayer('default', encoded)).toEqual({ layer: 'default', assignments })
+    const write = buildSetMatrixPayload({ layer: 'fn1', assignments })
+    expect([...write.slice(0, 7)]).toEqual([0x03, 1, 0, 1, 0, 0x80, 1])
+    expect([...write.slice(7, 7 + B68_MATRIX_BYTE_LENGTH)]).toEqual([...encoded])
+    expect([...write.slice(7 + B68_MATRIX_BYTE_LENGTH)]).toEqual(Array(128).fill(0))
   })
 
   it('accepts the observed native report-ID prefix and rejects mismatched layers', () => {
