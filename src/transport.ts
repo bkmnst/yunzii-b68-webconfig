@@ -1,4 +1,4 @@
-import { matchKnownDevice, vendorCollections } from './devices'
+import { allCollections, matchKnownDevice } from './devices'
 import { unsupportedBattery, unsupportedFirmware } from './protocol'
 import type {
   DiagnosticSnapshot,
@@ -19,24 +19,25 @@ export class KeyboardTransport extends EventTarget {
   get device(): HIDDevice | null { return this.#device }
   get knownDevice(): KnownDevice | null { return this.#knownDevice }
   get collections(): readonly HidReportDescriptor[] { return this.#collections }
+  get vendorCollectionCount(): number {
+    return this.#collections.filter((collection) => collection.vendorDefined).length
+  }
 
   async connect(device: HIDDevice): Promise<void> {
     const known = matchKnownDevice(device)
     if (!known) throw new Error('This HID device is not an allowlisted Yunzii B68 device.')
     if (!device.opened) await device.open()
 
-    const collections = vendorCollections(device)
-    if (collections.length === 0) {
-      if (device.opened) await device.close()
-      throw new Error('No vendor-defined HID collection is available to WebHID.')
-    }
+    const collections = allCollections(device)
 
     this.#abortController?.abort()
     this.#abortController = new AbortController()
     this.#device = device
     this.#knownDevice = known
     this.#collections = collections
-    this.#record(`Connected: ${known.connectionType}; ${collections.length} vendor collection(s)`)
+    this.#record(
+      `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
+    )
     device.oninputreport = (event) => {
       this.#record(`Input report ${event.reportId}: ${event.data.byteLength} byte(s)`)
       this.dispatchEvent(new CustomEvent('inputreport', { detail: event }))
@@ -104,6 +105,7 @@ export class KeyboardTransport extends EventTarget {
         productName: this.#device.productName || this.#knownDevice.displayName,
       },
       collections: this.#collections,
+      vendorCollectionCount: this.vendorCollectionCount,
       events: this.#events.slice(-25),
     }
   }
@@ -113,4 +115,3 @@ export class KeyboardTransport extends EventTarget {
     if (this.#events.length > 100) this.#events.shift()
   }
 }
-

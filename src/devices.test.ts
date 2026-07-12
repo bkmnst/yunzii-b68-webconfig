@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchKnownDevice, preferWired, vendorCollections } from './devices'
+import { allCollections, matchKnownDevice, preferWired, vendorCollections } from './devices'
 
 const collection = (usagePage: number, reportId = 0): HIDCollectionInfo => ({
   usagePage,
@@ -34,10 +34,18 @@ describe('HID descriptors', () => {
     expect(result).toEqual([{
       usagePage: 0xff00,
       usage: 1,
+      vendorDefined: true,
       inputReports: [{ reportId: 7, byteLength: 64 }],
       outputReports: [],
       featureReports: [{ reportId: 7, byteLength: 65 }],
     }])
   })
-})
 
+  it('describes protected and vendor-defined collections for diagnostics', () => {
+    const result = allCollections({ collections: [collection(0x01), collection(0xff00)] })
+    expect(result.map(({ usagePage, vendorDefined }) => ({ usagePage, vendorDefined }))).toEqual([
+      { usagePage: 0x01, vendorDefined: false },
+      { usagePage: 0xff00, vendorDefined: true },
+    ])
+  })
+})

@@ -27,7 +27,7 @@ function summarize(reports: HIDReportInfo[]): ReportSummary[] {
   return reports.map((report) => ({ reportId: report.reportId, byteLength: byteLength(report) }))
 }
 
-export function vendorCollections(device: Pick<HIDDevice, 'collections'>): HidReportDescriptor[] {
+export function allCollections(device: Pick<HIDDevice, 'collections'>): HidReportDescriptor[] {
   const flattened: HIDCollectionInfo[] = []
   const visit = (collections: HIDCollectionInfo[]) => {
     for (const collection of collections) {
@@ -37,15 +37,18 @@ export function vendorCollections(device: Pick<HIDDevice, 'collections'>): HidRe
   }
   visit(device.collections)
 
-  return flattened
-    .filter((collection) => collection.usagePage >= VENDOR_USAGE_PAGE_MIN)
-    .map((collection) => ({
+  return flattened.map((collection) => ({
       usagePage: collection.usagePage,
       usage: collection.usage,
+      vendorDefined: collection.usagePage >= VENDOR_USAGE_PAGE_MIN,
       inputReports: summarize(collection.inputReports ?? []),
       outputReports: summarize(collection.outputReports ?? []),
       featureReports: summarize(collection.featureReports ?? []),
     }))
+}
+
+export function vendorCollections(device: Pick<HIDDevice, 'collections'>): HidReportDescriptor[] {
+  return allCollections(device).filter((collection) => collection.vendorDefined)
 }
 
 export function preferWired(devices: HIDDevice[]): HIDDevice[] {
@@ -55,4 +58,3 @@ export function preferWired(devices: HIDDevice[]): HIDDevice[] {
     return a - b
   })
 }
-

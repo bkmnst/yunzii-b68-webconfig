@@ -132,7 +132,9 @@ async function connect(device?: HIDDevice): Promise<void> {
       return
     }
     await transport.connect(selected)
-    ui.notice.textContent = `${matchKnownDevice(selected)!.displayName} is connected. Descriptor inspection is ready.`
+    ui.notice.textContent = transport.vendorCollectionCount > 0
+      ? `${matchKnownDevice(selected)!.displayName} is connected. Descriptor inspection is ready.`
+      : `${matchKnownDevice(selected)!.displayName} is connected, but Chromium exposed no vendor-defined collection. Copy the advanced diagnostic report so we can inspect every visible usage page.`
     await refresh()
   } catch (error) {
     ui.notice.textContent = error instanceof DOMException && error.name === 'NotAllowedError'
@@ -187,4 +189,3 @@ if (!('hid' in navigator)) {
 }
 
 render()
-

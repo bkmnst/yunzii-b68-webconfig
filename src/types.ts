@@ -15,6 +15,7 @@ export interface ReportSummary {
 export interface HidReportDescriptor {
   usagePage: number
   usage: number
+  vendorDefined: boolean
   inputReports: ReportSummary[]
   outputReports: ReportSummary[]
   featureReports: ReportSummary[]
@@ -49,6 +50,6 @@ export interface DiagnosticSnapshot {
     productName: string
   }
   collections: HidReportDescriptor[]
+  vendorCollectionCount: number
   events: readonly string[]
 }
-

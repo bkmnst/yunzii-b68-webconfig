@@ -4,7 +4,7 @@ A cautious, browser-based status tool for the Yunzii B68 keyboard. It targets de
 
 ## Current status
 
-The application can safely discover and inspect the vendor-defined HID collections exposed by:
+The application can safely discover and inspect every HID collection Chromium exposes, marking vendor-defined collections when present:
 
 | Connection | Vendor ID | Product ID |
 | --- | ---: | ---: |
@@ -35,4 +35,3 @@ WebHID requires a secure context. Use the local development URL or HTTPS. The pr
 Static evidence from the extracted Windows application shows use of `HidD_GetFeature`, `HidD_SetFeature`, `ReadFile`, and `WriteFile`, with no separate kernel driver. Its configuration identifies `Fw=24` and `CRC=1`, but those values alone are not sufficient evidence for a safe command implementation.
 
 The original installer and all extracted vendor binaries and assets are intentionally excluded from version control and must not be redistributed with this project.
-
