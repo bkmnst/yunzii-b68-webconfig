@@ -16,13 +16,13 @@ describe('B68 lighting effects', () => {
 
   it('preserves capability flags instead of exposing unsupported controls', () => {
     expect(effectByHardwareId(1)).toMatchObject({
-      name: 'Fixed on', supportsSpeed: false, supportsBrightness: true, supportsFixedColor: true,
+      name: 'Effect slot 1 (ID 1)', vendorLabel: 'Fixed on', supportsSpeed: false, supportsBrightness: true, supportsFixedColor: true,
     })
     expect(effectByHardwareId(2)).toMatchObject({
-      name: 'Respire', supportsSpeed: true, supportsRandomColor: true, supportsFixedColor: true,
+      name: 'Effect slot 2 (ID 2)', vendorLabel: 'Respire', supportsSpeed: true, supportsRandomColor: true, supportsFixedColor: true,
     })
     expect(effectByHardwareId(0)).toMatchObject({
-      name: 'Off', supportsSpeed: false, supportsBrightness: false,
+      name: 'Effect slot 20 (ID 0)', vendorLabel: 'Off', supportsSpeed: false, supportsBrightness: false,
     })
   })
 })

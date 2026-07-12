@@ -242,7 +242,7 @@ export class KeyboardTransport extends EventTarget {
         reportId: 6,
         result: 'ok',
         bytes,
-        message: `GetLED validated; debounce ${configuration.debounceMs} ms; effect ${configuration.effectName} (ID ${configuration.hardwareEffectId}); speed ${configuration.speedLevel}/4; brightness ${configuration.brightnessLevel}/4`,
+        message: `GetLED validated; debounce ${configuration.debounceMs} ms; ${configuration.effectName}; vendor label ${configuration.effect?.vendorLabel ?? 'unknown'}; speed ${configuration.speedLevel}/4; brightness ${configuration.brightnessLevel}/4`,
       }]
       this.#record(`GetLED report read and validated: ${lighting.length} data byte(s)`)
       this.dispatchEvent(new Event('statuschange'))

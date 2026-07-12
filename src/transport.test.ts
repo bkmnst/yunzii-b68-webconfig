@@ -223,7 +223,7 @@ describe('KeyboardTransport', () => {
     expect(transport.diagnostics()?.featureReads[0]).toMatchObject({
       reportId: 6,
       result: 'ok',
-      message: expect.stringContaining('Sine wave'),
+      message: expect.stringContaining('Effect slot 13 (ID 13); vendor label Sine wave'),
     })
   })
 

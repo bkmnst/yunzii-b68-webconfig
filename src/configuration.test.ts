@@ -12,7 +12,7 @@ describe('B68 onboard configuration', () => {
     record[126] = 0x5a
     record[127] = 0xa5
     const parsed = parseB68OnboardConfiguration(record)
-    expect(parsed).toMatchObject({ debounceMs: 1, speedLevel: 4, brightnessLevel: 4, hardwareEffectId: 6, effectName: 'Rainbow wheel', effectParameter: 0x20 })
+    expect(parsed).toMatchObject({ debounceMs: 1, speedLevel: 4, brightnessLevel: 4, hardwareEffectId: 6, effectName: 'Effect slot 6 (ID 6)', effectParameter: 0x20 })
   })
 
   it('builds a typed SetLED record by patching only confirmed debounce byte 3', () => {
@@ -76,11 +76,11 @@ describe('B68 onboard configuration', () => {
     expect(parseB68OnboardConfiguration(record).effectName).toBe('Unknown effect 255')
   })
 
-  it('resolves hardware effect ID zero as Off', () => {
+  it('resolves hardware effect ID zero to the vendor Off slot', () => {
     const record = new Uint8Array(128)
     record[3] = 1
     record[126] = 0x5a
     record[127] = 0xa5
-    expect(parseB68OnboardConfiguration(record)).toMatchObject({ effect: { name: 'Off' }, effectName: 'Off' })
+    expect(parseB68OnboardConfiguration(record)).toMatchObject({ effect: { name: 'Effect slot 20 (ID 0)', vendorLabel: 'Off' }, effectName: 'Effect slot 20 (ID 0)' })
   })
 })

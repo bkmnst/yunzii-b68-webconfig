@@ -3,6 +3,8 @@ export interface LightingEffect {
   hardwareId: number
   previewAnimationId: number
   name: string
+  /** The text comes from the vendor model definition, not hardware validation. */
+  vendorLabel: string
   supportsSpeed: boolean
   supportsBrightness: boolean
   supportsDirection: boolean
@@ -24,7 +26,8 @@ function effect(
     appIndex,
     hardwareId: appIndex === 20 ? 0 : appIndex === 19 ? 21 : appIndex,
     previewAnimationId,
-    name,
+    name: `Effect slot ${appIndex} (ID ${appIndex === 20 ? 0 : appIndex === 19 ? 21 : appIndex})`,
+    vendorLabel: name,
     supportsSpeed: Boolean(speed),
     supportsBrightness: Boolean(brightness),
     supportsDirection: Boolean(direction),

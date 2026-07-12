@@ -285,7 +285,12 @@ let macroDrafts: HardwareMacro[] | null = null
 let macroDraftEvents: HardwareMacroEvent[] = []
 let editingMacroIndex: number | null = null
 
-for (const effect of B68_LIGHTING_EFFECTS) ui.onboardEffectSetting.add(new Option(effect.name, String(effect.hardwareId)))
+for (const effect of B68_LIGHTING_EFFECTS) {
+  ui.onboardEffectSetting.add(new Option(
+    `${effect.name} — vendor label: ${effect.vendorLabel}`,
+    String(effect.hardwareId),
+  ))
+}
 
 for (const layer of B68_LAYERS) ui.remapLayer.add(new Option(layer.toUpperCase(), layer))
 for (const key of B68_KEYS) ui.remapKey.add(new Option(key.label, String(key.ledIndex)))
