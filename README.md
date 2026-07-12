@@ -21,6 +21,8 @@ Live solid-color preview uses the B68's vendor feature report 6 (`0xFF00:0x0001`
 
 The per-key editor uses all 67 B68 key/control entries and their sparse LED indices from the model configuration. Selected keys can be painted repeatedly into a live custom frame without writing onboard memory.
 
+Lighting profiles can be saved locally, loaded into the live preview, deleted, and imported/exported as validated versioned JSON. These browser-local profiles do not claim to be onboard profiles; device persistence remains a separate protocol feature.
+
 ## Safety boundary
 
 Allowed behavior currently includes device selection, descriptor inspection, status reads, and the explicit live RGB preview command. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.
