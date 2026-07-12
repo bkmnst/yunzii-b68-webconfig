@@ -11,6 +11,8 @@ The application can safely discover and inspect every HID collection Chromium ex
 | Wired B68 | `0x258A` | `0x010C` |
 | 2.4 GHz dongle | `0x3554` | `0xFA09` |
 
+The WebHID picker requires vendor usage page `0xFF00`, preventing Chromium from selecting the protected boot-keyboard interface (`0x01:0x06`).
+
 Firmware and battery queries remain explicitly unavailable until their exact read-only packet formats are independently confirmed through static analysis. The shipped application sends no HID reports.
 
 ## Safety boundary

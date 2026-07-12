@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allCollections, matchKnownDevice, preferWired, vendorCollections } from './devices'
+import { allCollections, DEVICE_FILTERS, matchKnownDevice, preferWired, vendorCollections } from './devices'
 
 const collection = (usagePage: number, reportId = 0): HIDCollectionInfo => ({
   usagePage,
@@ -12,6 +12,13 @@ const collection = (usagePage: number, reportId = 0): HIDCollectionInfo => ({
 })
 
 describe('known devices', () => {
+  it('requests only the 0xFF00 configuration interface', () => {
+    expect(DEVICE_FILTERS).toEqual([
+      { vendorId: 0x258a, productId: 0x010c, usagePage: 0xff00 },
+      { vendorId: 0x3554, productId: 0xfa09, usagePage: 0xff00 },
+    ])
+  })
+
   it('matches wired and wireless identifiers', () => {
     expect(matchKnownDevice({ vendorId: 0x258a, productId: 0x010c })?.connectionType).toBe('wired')
     expect(matchKnownDevice({ vendorId: 0x3554, productId: 0xfa09 })?.connectionType).toBe('wireless')

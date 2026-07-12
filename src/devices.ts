@@ -5,12 +5,13 @@ export const KNOWN_DEVICES: readonly KnownDevice[] = [
   { connectionType: 'wireless', vendorId: 0x3554, productId: 0xfa09, displayName: 'Yunzii B68 dongle' },
 ]
 
+export const VENDOR_USAGE_PAGE_MIN = 0xff00
+
 export const DEVICE_FILTERS: readonly HIDDeviceFilter[] = KNOWN_DEVICES.map(({ vendorId, productId }) => ({
   vendorId,
   productId,
+  usagePage: VENDOR_USAGE_PAGE_MIN,
 }))
-
-export const VENDOR_USAGE_PAGE_MIN = 0xff00
 
 export function matchKnownDevice(device: Pick<HIDDevice, 'vendorId' | 'productId'>): KnownDevice | null {
   return KNOWN_DEVICES.find(

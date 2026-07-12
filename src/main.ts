@@ -13,7 +13,7 @@ app.innerHTML = `
       <h1>Your B68,<br><em>without the driver.</em></h1>
       <p class="lede">Inspect firmware and battery status directly in your browser. Nothing is installed, uploaded, or changed on your keyboard.</p>
       <div class="actions">
-        <button id="connect" class="primary">Connect keyboard</button>
+        <button id="connect" class="primary">Connect configuration interface</button>
         <button id="disconnect" class="secondary" hidden>Disconnect</button>
       </div>
       <p id="notice" class="notice" role="status" aria-live="polite"></p>
