@@ -33,7 +33,7 @@ All 20 onboard effects from the B68 model definition can be selected persistentl
 
 Supported effects expose persistent 0–4 speed and brightness controls. These patch only the model-mapped hardware fields and require matching `GetLED` readback.
 
-The macro editor can build and revise named keyboard press/release sequences with per-event delays, reorder or remove individual events, write the typed paged archive, and require a complete decoded byte-for-byte readback. Verified macros can then be assigned to keys with fixed-count, until-release, or until-any-key playback. Clearing the final macro remains disabled because the native zero-length path sends no clearing page.
+The macro editor can build and revise named keyboard and mouse sequences with per-event delays, including five mouse buttons, signed X/Y movement, and wheel movement. Events can be reordered or removed; writes use the typed paged archive and require a complete decoded byte-for-byte readback. Verified macros can then be assigned to keys with fixed-count, until-release, or until-any-key playback. Clearing the final macro remains disabled because the native zero-length path sends no clearing page.
 
 ## Safety boundary
 

@@ -12,7 +12,7 @@ export interface HardwareMacroEvent {
   type: MacroEventType
   delayMs: number
   value: number
-  /** Only keyboard events (type 1) use bit 7 as the key-release flag. */
+  /** Keyboard and mouse-button events (types 1 and 2) use bit 7 as the release flag. */
   released?: boolean
 }
 
@@ -78,7 +78,7 @@ function encodeMacro(macro: HardwareMacro): Uint8Array {
       throw new RangeError(`Macro delay must be an integer from 0 to ${MACRO_MAX_DELAY_MS}.`)
     }
     assertByte(event.value, 'Macro event value')
-    if (event.released && event.type !== 1) throw new TypeError('Only keyboard macro events can be marked released.')
+    if (event.released && event.type !== 1 && event.type !== 2) throw new TypeError('Only keyboard and mouse-button macro events can be marked released.')
     result[offset] = (event.type << 4) | (event.released ? 0x80 : 0) | (event.delayMs >>> 16)
     result[offset + 1] = event.delayMs >>> 8
     result[offset + 2] = event.delayMs
@@ -190,7 +190,7 @@ export function decodeMacroArchive(bytes: Uint8Array, macroCount: number): reado
       if (type < 1 || type > 5) throw new RangeError('Macro record contains an unknown event type.')
       events.push({
         type,
-        released: type === 1 && (flags & 0x80) !== 0,
+        released: (type === 1 || type === 2) && (flags & 0x80) !== 0,
         delayMs: ((flags & 0x0f) << 16) | (record[offset + 1] << 8) | record[offset + 2],
         value: record[offset + 3],
       })

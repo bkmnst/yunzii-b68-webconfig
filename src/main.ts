@@ -125,8 +125,11 @@ app.innerHTML = `
         <button id="edit-macro" class="secondary" disabled>Edit selected</button>
         <button id="delete-macro" class="secondary" disabled>Delete selected</button>
         <label>Name <input id="macro-name" maxlength="127" /></label>
-        <label>Key <select id="macro-key"></select></label>
-        <label>Action <select id="macro-action"><option value="press">Press</option><option value="release">Release</option></select></label>
+        <label>Event <select id="macro-event-kind"><option value="keyboard">Keyboard key</option><option value="mouse-button">Mouse button</option><option value="mouse-x">Mouse X movement</option><option value="mouse-y">Mouse Y movement</option><option value="wheel">Mouse wheel</option></select></label>
+        <label id="macro-key-label">Key <select id="macro-key"></select></label>
+        <label id="macro-button-label" hidden>Button <select id="macro-button"><option value="1">Left</option><option value="2">Right</option><option value="4">Middle</option><option value="8">Back</option><option value="16">Forward</option></select></label>
+        <label id="macro-value-label" hidden>Amount <input id="macro-value" type="number" min="-127" max="127" value="1" /></label>
+        <label id="macro-action-label">Action <select id="macro-action"><option value="press">Press</option><option value="release">Release</option></select></label>
         <label>Delay before event <input id="macro-delay" type="number" min="0" max="1048575" value="20" /> ms</label>
         <button id="add-macro-event" class="secondary">Add event</button>
         <button id="clear-macro-events" class="secondary" disabled>Clear events</button>
@@ -227,8 +230,15 @@ const ui = {
   editMacro: document.querySelector<HTMLButtonElement>('#edit-macro')!,
   deleteMacro: document.querySelector<HTMLButtonElement>('#delete-macro')!,
   macroName: document.querySelector<HTMLInputElement>('#macro-name')!,
+  macroEventKind: document.querySelector<HTMLSelectElement>('#macro-event-kind')!,
   macroKey: document.querySelector<HTMLSelectElement>('#macro-key')!,
+  macroKeyLabel: document.querySelector<HTMLElement>('#macro-key-label')!,
+  macroButton: document.querySelector<HTMLSelectElement>('#macro-button')!,
+  macroButtonLabel: document.querySelector<HTMLElement>('#macro-button-label')!,
+  macroValue: document.querySelector<HTMLInputElement>('#macro-value')!,
+  macroValueLabel: document.querySelector<HTMLElement>('#macro-value-label')!,
   macroAction: document.querySelector<HTMLSelectElement>('#macro-action')!,
+  macroActionLabel: document.querySelector<HTMLElement>('#macro-action-label')!,
   macroDelay: document.querySelector<HTMLInputElement>('#macro-delay')!,
   addMacroEvent: document.querySelector<HTMLButtonElement>('#add-macro-event')!,
   clearMacroEvents: document.querySelector<HTMLButtonElement>('#clear-macro-events')!,
@@ -289,6 +299,7 @@ for (const modifier of MODIFIER_OPTIONS) {
   label.append(input, ` ${modifier.label}`)
   ui.remapModifiers.append(label)
 }
+renderMacroEventInput()
 
 function renderSpecialAssignmentOptions(): void {
   const options = ui.remapKind.value === 'device' ? SAFE_DEVICE_ASSIGNMENTS
@@ -301,9 +312,16 @@ function renderMacroEditor(): void {
   ui.macroEvents.replaceChildren(...(macroDraftEvents.length > 0
     ? macroDraftEvents.map((event, index) => {
       const item = document.createElement('li')
+      const signedValue = event.value > 127 ? event.value - 256 : event.value
       const key = KEYBOARD_USAGE_OPTIONS.find((option) => option.usage === event.value)?.label ?? `0x${event.value.toString(16)}`
+      const button = ({ 1: 'Left', 2: 'Right', 4: 'Middle', 8: 'Back', 16: 'Forward' } as Record<number, string>)[event.value] ?? `mask 0x${event.value.toString(16)}`
+      const description = event.type === 1 ? `${event.released ? 'Release' : 'Press'} ${key}`
+        : event.type === 2 ? `${event.released ? 'Release' : 'Press'} ${button} mouse button`
+          : event.type === 3 ? `Move mouse X ${signedValue}`
+            : event.type === 4 ? `Move mouse Y ${signedValue}`
+              : `Scroll wheel ${signedValue}`
       const text = document.createElement('span')
-      text.textContent = `${event.delayMs} ms · ${event.released ? 'Release' : 'Press'} ${key}`
+      text.textContent = `${event.delayMs} ms · ${description}`
       const up = Object.assign(document.createElement('button'), { type: 'button', textContent: '↑', disabled: index === 0, title: 'Move event earlier' })
       const down = Object.assign(document.createElement('button'), { type: 'button', textContent: '↓', disabled: index === macroDraftEvents.length - 1, title: 'Move event later' })
       const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Remove', title: 'Remove event' })
@@ -347,6 +365,17 @@ function renderMacroEditor(): void {
   ui.remapPlaybackLabel.hidden = !macroMode
   ui.remapRepeatLabel.hidden = !macroMode || ui.remapPlayback.value !== 'count'
   ui.stageRemap.disabled = !transport.matrix(ui.remapLayer.value as B68Layer) || (macroMode && ui.remapMacro.options.length === 0)
+}
+
+function renderMacroEventInput(): void {
+  const kind = ui.macroEventKind.value
+  const keyboard = kind === 'keyboard'
+  const button = kind === 'mouse-button'
+  ui.macroKeyLabel.hidden = !keyboard
+  ui.macroButtonLabel.hidden = !button
+  ui.macroValueLabel.hidden = keyboard || button
+  ui.macroActionLabel.hidden = !keyboard && !button
+  ui.macroValueLabel.firstChild!.textContent = kind === 'wheel' ? 'Wheel amount ' : kind === 'mouse-x' ? 'X amount ' : 'Y amount '
 }
 
 for (const row of B68_KEY_ROWS) {
@@ -662,18 +691,28 @@ ui.readMacros.addEventListener('click', async () => {
   render()
 })
 ui.macroName.addEventListener('input', renderMacroEditor)
+ui.macroEventKind.addEventListener('change', renderMacroEventInput)
 ui.addMacroEvent.addEventListener('click', () => {
   const delayMs = Number(ui.macroDelay.value)
   if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 0xfffff) {
     ui.notice.textContent = 'Macro delay must be an integer from 0 to 1,048,575 ms.'
     return
   }
-  macroDraftEvents = [...macroDraftEvents, {
-    type: 1,
-    delayMs,
-    value: Number(ui.macroKey.value),
-    released: ui.macroAction.value === 'release',
-  }]
+  const kind = ui.macroEventKind.value
+  let event: HardwareMacroEvent
+  if (kind === 'keyboard') {
+    event = { type: 1, delayMs, value: Number(ui.macroKey.value), released: ui.macroAction.value === 'release' }
+  } else if (kind === 'mouse-button') {
+    event = { type: 2, delayMs, value: Number(ui.macroButton.value), released: ui.macroAction.value === 'release' }
+  } else {
+    const amount = Number(ui.macroValue.value)
+    if (!Number.isInteger(amount) || amount < -127 || amount > 127 || amount === 0) {
+      ui.notice.textContent = 'Mouse movement and wheel amounts must be nonzero integers from -127 to 127.'
+      return
+    }
+    event = { type: kind === 'mouse-x' ? 3 : kind === 'mouse-y' ? 4 : 5, delayMs, value: amount & 0xff }
+  }
+  macroDraftEvents = [...macroDraftEvents, event]
   renderMacroEditor()
 })
 ui.clearMacroEvents.addEventListener('click', () => { macroDraftEvents = []; renderMacroEditor() })
