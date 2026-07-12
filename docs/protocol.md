@@ -47,7 +47,7 @@ The wired sync routine calls `GetLED` with exactly 400 bytes and retries malform
 84 00 00 01 00 90 01
 ```
 
-The response must echo command `0x84`, selector zero, reserved zero, page 1, and length 400 before its data is accepted. The vendor sync routine additionally validates fields inside the data block; those offsets are not yet all named.
+The response must echo command `0x84`, selector zero, reserved zero, page 1, and length 400 before its data is accepted. Hardware diagnostics show that Chromium returns native report ID `06` as byte 0 for this B68 feature interface, even though WebHID normally supplies the report ID separately; the parser therefore accepts either framing and validates all remaining fields at the corresponding offset. The vendor sync routine additionally validates fields inside the data block; those offsets are not yet all named.
 
 The normal write path does **not** write the 400-byte read buffer back. It constructs a fresh 128-byte record, passes it to `SetLED`, waits 60 ms, and checks a device-state getter. Earlier analysis mistook that getter for an apply command; no separate commit packet has been established. Confirmed constructed offsets include an effect-state flag at 9, hardware effect ID at 10, another effect parameter at 11, side-light fields at 18–21, optional settings at 22–24, two `FF` sentinels at 56–57, and a sequence of packed pairs beginning at 58. The semantic names of every field still require correlation with a real response or additional static evidence.
 

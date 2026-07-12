@@ -165,11 +165,12 @@ export class KeyboardTransport extends EventTarget {
     )
     if (!supportsReport6) return
 
+    let bytes: number[] = []
     try {
       await this.#device.sendFeatureReport(6, buildGetOnboardLightingPayload())
       await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
       const view = await this.#device.receiveFeatureReport(6)
-      const bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
+      bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
       const lighting = parseOnboardLightingResponse(view)
       this.#featureReads = [...this.#featureReads, {
         reportId: 6,
@@ -183,6 +184,7 @@ export class KeyboardTransport extends EventTarget {
       this.#featureReads = [...this.#featureReads, {
         reportId: 6,
         result: 'error',
+        bytes,
         message: `GetLED: ${message}`,
       }]
       this.#record(`GetLED report failed: ${message}`)

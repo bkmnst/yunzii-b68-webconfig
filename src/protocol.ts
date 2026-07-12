@@ -126,17 +126,20 @@ export function buildGetOnboardLightingPayload(): Uint8Array<ArrayBuffer> {
 export function parseOnboardLightingResponse(response: DataView): readonly number[] {
   const bytes = new Uint8Array(response.buffer, response.byteOffset, response.byteLength)
   const headerLength = GET_LED_HEADER.length
-  if (bytes.length < headerLength + ONBOARD_LIGHTING_DATA_LENGTH) {
+  // Chromium normally excludes the report ID from WebHID DataViews, but this
+  // B68 interface has been observed returning native report ID 6 as byte 0.
+  const start = bytes[0] === LIVE_RGB_REPORT_ID ? 1 : 0
+  if (bytes.length < start + headerLength + ONBOARD_LIGHTING_DATA_LENGTH) {
     throw new RangeError('GetLED response is shorter than its declared 400-byte data block.')
   }
-  if (bytes[0] !== 0x84 || bytes[1] !== 0 || bytes[2] !== 0 || bytes[3] !== 1) {
+  if (bytes[start] !== 0x84 || bytes[start + 1] !== 0 || bytes[start + 2] !== 0 || bytes[start + 3] !== 1) {
     throw new RangeError('GetLED response header or page echo is invalid.')
   }
-  const declaredLength = bytes[5] | (bytes[6] << 8)
+  const declaredLength = bytes[start + 5] | (bytes[start + 6] << 8)
   if (declaredLength !== ONBOARD_LIGHTING_DATA_LENGTH) {
     throw new RangeError(`GetLED response declared ${declaredLength} bytes instead of 400.`)
   }
-  return [...bytes.slice(headerLength, headerLength + ONBOARD_LIGHTING_DATA_LENGTH)]
+  return [...bytes.slice(start + headerLength, start + headerLength + ONBOARD_LIGHTING_DATA_LENGTH)]
 }
 
 export function parseModelId(response: DataView): number {

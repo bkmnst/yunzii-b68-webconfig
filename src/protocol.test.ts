@@ -99,4 +99,14 @@ describe('onboard lighting query', () => {
     expect(() => parseOnboardLightingResponse(new DataView(response.buffer))).toThrow('header')
     expect(() => parseOnboardLightingResponse(new DataView(new ArrayBuffer(406)))).toThrow('shorter')
   })
+
+  it('accepts the native report ID prefix observed on Chromium feature reads', () => {
+    const response = new Uint8Array(520)
+    response[0] = 6
+    response.set([0x84, 0, 0, 1, 0, 0x90, 1], 1)
+    response.fill(0x33, 8, 408)
+    const data = parseOnboardLightingResponse(new DataView(response.buffer))
+    expect(data).toHaveLength(400)
+    expect(data[0]).toBe(0x33)
+  })
 })
