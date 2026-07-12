@@ -51,6 +51,28 @@ export function encodeKeyboardAssignment(modifiers: number, usage: number): Matr
   return { bytes: [0, modifiers, 0, usage] }
 }
 
+export function replaceMatrixAssignment(
+  matrix: B68MatrixLayer,
+  index: number,
+  assignment: MatrixAssignment,
+): B68MatrixLayer {
+  if (!Number.isInteger(index) || index < 0 || index >= B68_MATRIX_CRC_INDEX) {
+    throw new RangeError(`Editable B68 matrix indices are 0 through ${B68_MATRIX_CRC_INDEX - 1}.`)
+  }
+  assignment.bytes.forEach(assertByte)
+  const assignments = matrix.assignments.map((current, currentIndex) => currentIndex === index
+    ? { bytes: [...assignment.bytes] as [number, number, number, number] }
+    : { bytes: [...current.bytes] as [number, number, number, number] })
+  return { layer: matrix.layer, assignments }
+}
+
+export function matrixLayersEqual(left: B68MatrixLayer, right: B68MatrixLayer): boolean {
+  return left.layer === right.layer && left.assignments.length === right.assignments.length
+    && left.assignments.every((assignment, index) => assignment.bytes.every(
+      (byte, offset) => byte === right.assignments[index].bytes[offset],
+    ))
+}
+
 function layerIndex(layer: B68Layer): number {
   const index = B68_LAYERS.indexOf(layer)
   if (index < 0) throw new RangeError('Unknown B68 layer.')

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { encodeKeyboardAssignment, replaceMatrixAssignment, type B68MatrixLayer, type MatrixAssignment } from './matrix'
 import { KeyboardTransport } from './transport'
 
 function mockDevice(overrides: Partial<HIDDevice> = {}): HIDDevice {
@@ -18,6 +19,14 @@ function mockDevice(overrides: Partial<HIDDevice> = {}): HIDDevice {
     sendFeatureReport: vi.fn(),
     sendReport: vi.fn(),
   }, overrides) as HIDDevice
+}
+
+function matrixResponse(matrix: B68MatrixLayer): DataView {
+  const response = new Uint8Array(519)
+  const layer = ['default', 'fn1', 'fn2', 'tap'].indexOf(matrix.layer)
+  response.set([0x83, layer, 0, 1, 0, 0, 2])
+  matrix.assignments.forEach((assignment, index) => response.set(assignment.bytes, 7 + index * 4))
+  return new DataView(response.buffer)
 }
 
 describe('KeyboardTransport', () => {
@@ -200,6 +209,57 @@ describe('KeyboardTransport', () => {
       result: 'ok',
       message: expect.stringContaining('127/127'),
     })
+  })
+
+  it('writes a typed matrix only after a validated read and exact readback', async () => {
+    const assignments: MatrixAssignment[] = Array.from({ length: 128 }, () => ({ bytes: [0, 0, 0, 0] }))
+    assignments[127] = { bytes: [0, 0, 0x5a, 0xa5] }
+    const baseline: B68MatrixLayer = { layer: 'fn1', assignments }
+    const changed = replaceMatrixAssignment(baseline, 33, encodeKeyboardAssignment(0, 0x0a))
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn()
+        .mockResolvedValueOnce(matrixResponse(baseline))
+        .mockResolvedValueOnce(matrixResponse(changed)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await expect(transport.applyMatrixLayer(changed)).rejects.toThrow('Read and validate')
+    await transport.inspectMatrix('fn1')
+    await transport.applyMatrixLayer(changed)
+
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(3)
+    const setPayload = vi.mocked(device.sendFeatureReport).mock.calls[1][1] as Uint8Array
+    expect([...setPayload.slice(0, 7)]).toEqual([0x03, 1, 0, 1, 0, 0, 2])
+    expect([...setPayload.slice(7 + 33 * 4, 7 + 34 * 4)]).toEqual([0, 0, 0, 0x0a])
+    expect(transport.matrix('fn1')).toEqual(changed)
+  })
+
+  it('rejects reserved matrix changes and mismatched readback', async () => {
+    const assignments: MatrixAssignment[] = Array.from({ length: 128 }, () => ({ bytes: [0, 0, 0, 0] }))
+    assignments[127] = { bytes: [0, 0, 0x5a, 0xa5] }
+    const baseline: B68MatrixLayer = { layer: 'default', assignments }
+    const changed = replaceMatrixAssignment(baseline, 1, encodeKeyboardAssignment(0, 4))
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn().mockResolvedValue(matrixResponse(baseline)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectMatrix('default')
+
+    const tampered: B68MatrixLayer = {
+      ...baseline,
+      assignments: baseline.assignments.map((assignment, index): MatrixAssignment => index === 100 ? { bytes: [1, 0, 0, 0] } : assignment),
+    }
+    await expect(transport.applyMatrixLayer(tampered)).rejects.toThrow('Reserved')
+    await expect(transport.applyMatrixLayer(changed)).rejects.toThrow('readback did not match')
   })
 
   it('sends only the semantic live RGB feature report', async () => {

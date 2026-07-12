@@ -43,7 +43,7 @@ The initial 384-byte Default-layer capture contains 67 nonzero assignments in en
 
 A second real read validates FN1 with 34 assignments and validates FN2 and Tap as empty, matching their factory `KB.ini` sections. The FN1 bytes also confirm vendor device-command family `07` and lighting-command family `08`. Labels for Bluetooth slots, 2.4 GHz pairing, Win lock, battery display, backlight, reset, F-row switching, effect/color, brightness, and speed are cross-checked against the official B68 manual. Command `07 00 00 0A` on FN+G and lighting command `08 00 00 01` on FN+Space remain unnamed because the available documentation does not identify them.
 
-The matching typed `SetMatrix` constructor uses command `03`, the same fixed layer selector, page 1, declared length 512, and a complete encoded layer with the required CRC marker. It is implemented as an offline constructor but is not connected to UI transport until edits can be followed by an immediate validated `GetMatrix` readback.
+The matching typed `SetMatrix` constructor uses command `03`, the same fixed layer selector, page 1, declared length 512, and a complete encoded layer with the required CRC marker. The transport now has a semantic layer-write transaction that is callable only after that layer has been fully read and validated. It preserves reserved entries 96–126 from the hardware baseline and accepts success only after an immediate exact 512-byte `GetMatrix` readback. It is not an arbitrary packet API and is not yet exposed in the UI pending the first authoritative 512-byte hardware capture.
 
 The paired read command is the write command with bit 7 set. This is documented evidence, not permission to synthesize or expose arbitrary commands.
 

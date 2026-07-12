@@ -1,6 +1,15 @@
 import { allCollections, matchKnownDevice } from './devices'
 import { parseB68OnboardConfiguration, type B68OnboardConfiguration } from './configuration'
-import { buildGetMatrixPayload, parseMatrixResponse, type B68Layer, type B68MatrixLayer } from './matrix'
+import {
+  B68_MATRIX_CRC_INDEX,
+  buildGetMatrixPayload,
+  buildSetMatrixPayload,
+  encodeMatrixLayer,
+  matrixLayersEqual,
+  parseMatrixResponse,
+  type B68Layer,
+  type B68MatrixLayer,
+} from './matrix'
 import {
   buildLiveRgbPayload,
   buildIdentityQueryPayload,
@@ -257,6 +266,36 @@ export class KeyboardTransport extends EventTarget {
       }]
       this.#record(`${layer} matrix read failed: ${message}`)
     }
+  }
+
+  /** Writes one complete typed layer, then requires an exact full-layer readback before accepting it. */
+  async applyMatrixLayer(matrix: B68MatrixLayer): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') {
+      throw new Error('A wired B68 must be connected to apply a keymap.')
+    }
+    const baseline = this.#matrices.get(matrix.layer)
+    if (!baseline) throw new Error('Read and validate this complete keymap layer before changing it.')
+    encodeMatrixLayer(matrix)
+    for (let index = 96; index < B68_MATRIX_CRC_INDEX; index += 1) {
+      if (!matrix.assignments[index].bytes.every((byte, offset) => byte === baseline.assignments[index].bytes[offset])) {
+        throw new Error('Reserved matrix entries must remain unchanged from the validated hardware read.')
+      }
+    }
+
+    this.stopLiveColor()
+    await this.#device.sendFeatureReport(6, buildSetMatrixPayload(matrix))
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 60))
+    await this.#device.sendFeatureReport(6, buildGetMatrixPayload(matrix.layer))
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
+    const view = await this.#device.receiveFeatureReport(6)
+    const readback = parseMatrixResponse(matrix.layer, view)
+    if (!matrixLayersEqual(matrix, readback)) {
+      this.#record(`${matrix.layer} matrix write readback mismatch`)
+      throw new Error('The keyboard readback did not match the requested keymap; the change was not accepted.')
+    }
+    this.#matrices.set(matrix.layer, readback)
+    this.#record(`${matrix.layer} matrix write verified by exact 512-byte readback`)
+    this.dispatchEvent(new Event('statuschange'))
   }
 
   async setLiveColor(color: RgbColor): Promise<void> {

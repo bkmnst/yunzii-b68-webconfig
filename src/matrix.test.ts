@@ -8,8 +8,10 @@ import {
   decodeSemanticAssignment,
   encodeKeyboardAssignment,
   encodeMatrixLayer,
+  matrixLayersEqual,
   type MatrixAssignment,
   parseMatrixResponse,
+  replaceMatrixAssignment,
 } from './matrix'
 
 describe('B68 matrix protocol', () => {
@@ -48,6 +50,18 @@ describe('B68 matrix protocol', () => {
     const response = buildGetMatrixPayload('default')
     response[6] = 1
     expect(() => parseMatrixResponse('default', new DataView(response.buffer))).toThrow('declared')
+  })
+
+  it('replaces only an editable assignment and compares complete layers', () => {
+    const assignments: MatrixAssignment[] = Array.from({ length: 128 }, () => ({ bytes: [0, 0, 0, 0] }))
+    assignments[127] = { bytes: [0, 0, 0x5a, 0xa5] }
+    const original = { layer: 'fn1', assignments } as const
+    const changed = replaceMatrixAssignment(original, 33, encodeKeyboardAssignment(0x02, 0x0a))
+    expect(changed.assignments[33].bytes).toEqual([0, 2, 0, 10])
+    expect(original.assignments[33].bytes).toEqual([0, 0, 0, 0])
+    expect(matrixLayersEqual(original, changed)).toBe(false)
+    expect(matrixLayersEqual(changed, replaceMatrixAssignment(original, 33, encodeKeyboardAssignment(2, 10)))).toBe(true)
+    expect(() => replaceMatrixAssignment(original, 127, encodeKeyboardAssignment(0, 4))).toThrow('0 through 126')
   })
 
   it('decodes assignment forms confirmed by the Default-layer hardware capture', () => {
