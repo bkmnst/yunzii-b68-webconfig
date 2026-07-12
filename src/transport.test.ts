@@ -41,6 +41,21 @@ describe('KeyboardTransport', () => {
     expect(transport.diagnostics()?.collections).toHaveLength(1)
   })
 
+  it('captures bounded input report bytes in local diagnostics', async () => {
+    const device = mockDevice()
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    const bytes = Uint8Array.from([0x12, 0x34, 0x56])
+    device.oninputreport?.call(device, {
+      reportId: 3,
+      data: new DataView(bytes.buffer),
+      device,
+    } as HIDInputReportEvent)
+    expect(transport.diagnostics()?.inputReports).toMatchObject([
+      { reportId: 3, bytes: [0x12, 0x34, 0x56] },
+    ])
+  })
+
   it('rejects unknown devices without opening them', async () => {
     const device = mockDevice({ vendorId: 1, productId: 2 })
     await expect(new KeyboardTransport().connect(device)).rejects.toThrow('not an allowlisted')

@@ -24,6 +24,7 @@ export class KeyboardTransport extends EventTarget {
   #collections: HidReportDescriptor[] = []
   #events: string[] = []
   #featureReads: DiagnosticSnapshot['featureReads'] = []
+  #inputReports: DiagnosticSnapshot['inputReports'] = []
   #abortController: AbortController | null = null
   #livePayload: Uint8Array<ArrayBuffer> | null = null
   #liveColorTimer: ReturnType<typeof setInterval> | null = null
@@ -49,11 +50,18 @@ export class KeyboardTransport extends EventTarget {
     this.#knownDevice = known
     this.#collections = collections
     this.#featureReads = []
+    this.#inputReports = []
     this.#record(
       `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
     )
     device.oninputreport = (event) => {
-      this.#record(`Input report ${event.reportId}: ${event.data.byteLength} byte(s)`)
+      const bytes = [...new Uint8Array(event.data.buffer, event.data.byteOffset, Math.min(event.data.byteLength, 64))]
+      this.#inputReports = [...this.#inputReports.slice(-49), {
+        capturedAt: new Date().toISOString(),
+        reportId: event.reportId,
+        bytes,
+      }]
+      this.#record(`Input report ${event.reportId}: ${event.data.byteLength} byte(s); ${bytes.map(hexByte).join(' ')}`)
       this.dispatchEvent(new CustomEvent('inputreport', { detail: event }))
     }
     this.dispatchEvent(new Event('statuschange'))
@@ -69,6 +77,7 @@ export class KeyboardTransport extends EventTarget {
     this.#knownDevice = null
     this.#collections = []
     this.#featureReads = []
+    this.#inputReports = []
     this.#record('Disconnected')
     if (device?.opened) await device.close()
     this.dispatchEvent(new Event('statuschange'))
@@ -83,6 +92,7 @@ export class KeyboardTransport extends EventTarget {
     this.#knownDevice = null
     this.#collections = []
     this.#featureReads = []
+    this.#inputReports = []
     this.#record('Device disconnected')
     this.dispatchEvent(new Event('statuschange'))
   }
@@ -214,6 +224,7 @@ export class KeyboardTransport extends EventTarget {
       collections: this.#collections,
       vendorCollectionCount: this.vendorCollectionCount,
       featureReads: this.#featureReads,
+      inputReports: this.#inputReports,
       events: this.#events.slice(-25),
     }
   }
@@ -261,4 +272,8 @@ export class KeyboardTransport extends EventTarget {
       throw new DOMException('The connected interface does not expose the B68 live RGB report.', 'NotSupportedError')
     }
   }
+}
+
+function hexByte(value: number): string {
+  return value.toString(16).padStart(2, '0').toUpperCase()
 }

@@ -28,6 +28,7 @@ Lighting profiles can be saved locally, loaded into the live preview, deleted, a
 Allowed behavior currently includes device selection, descriptor inspection, status reads, and the explicit live RGB preview command. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.
 
 No device data is uploaded. Diagnostic reports exist only in memory and can be copied manually.
+Up to 50 recent HID input reports are retained in memory with at most 64 bytes each, so wired and dongle status events can be compared without an extension or persistent traffic log.
 
 ## Development
 

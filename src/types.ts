@@ -57,5 +57,10 @@ export interface DiagnosticSnapshot {
     bytes?: readonly number[]
     message?: string
   }[]
+  inputReports: readonly {
+    capturedAt: string
+    reportId: number
+    bytes: readonly number[]
+  }[]
   events: readonly string[]
 }
