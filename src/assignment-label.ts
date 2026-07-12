@@ -59,6 +59,7 @@ export function assignmentLabel(assignment: MatrixAssignment): string {
     case 'device-command': return B68_DEVICE_COMMANDS[semantic.command] ?? `Device command 0x${semantic.command.toString(16).padStart(2, '0').toUpperCase()}`
     case 'lighting-command': return B68_LIGHTING_COMMANDS[`${semantic.group},${semantic.value},${semantic.parameter}`]
       ?? `Lighting command ${semantic.group}:${semantic.value}:${semantic.parameter}`
+    case 'crc-marker': return 'CRC marker'
     case 'macro': return `Macro ${semantic.index + 1} · ${semantic.mode}`
     case 'unknown': return `Special ${semantic.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join(' ')}`
   }

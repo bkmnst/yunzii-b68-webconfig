@@ -170,8 +170,9 @@ describe('KeyboardTransport', () => {
 
   it('uses the confirmed read-only GetMatrix request for the default layer', async () => {
     const response = new Uint8Array(519)
-    response.set([0x83, 0, 0, 1, 0, 0x80, 1])
-    response.fill(1, 7, 7 + 384)
+    response.set([0x83, 0, 0, 1, 0, 0, 2])
+    response.fill(1, 7)
+    response.set([0, 0, 0x5a, 0xa5], 7 + 127 * 4)
     const device = mockDevice({
       collections: [{
         usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
@@ -184,10 +185,10 @@ describe('KeyboardTransport', () => {
     await transport.inspectMatrix('default')
 
     const payload = vi.mocked(device.sendFeatureReport).mock.calls[0][1] as Uint8Array
-    expect([...payload.slice(0, 7)]).toEqual([0x83, 0, 0, 1, 0, 0x80, 1])
+    expect([...payload.slice(0, 7)]).toEqual([0x83, 0, 0, 1, 0, 0, 2])
     expect(transport.diagnostics()?.featureReads[0]).toMatchObject({
       result: 'ok',
-      message: expect.stringContaining('96/96'),
+      message: expect.stringContaining('127/127'),
     })
   })
 

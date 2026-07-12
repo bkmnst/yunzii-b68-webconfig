@@ -222,14 +222,14 @@ export class KeyboardTransport extends EventTarget {
       bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
       const matrix = parseMatrixResponse(layer, view)
       this.#matrices.set(layer, matrix)
-      const assigned = matrix.assignments.filter((assignment) => assignment.bytes.some((byte) => byte !== 0)).length
+      const assigned = matrix.assignments.slice(0, 127).filter((assignment) => assignment.bytes.some((byte) => byte !== 0)).length
       this.#featureReads = [...this.#featureReads, {
         reportId: 6,
         result: 'ok',
         bytes,
-        message: `GetMatrix(${layer}) validated; ${assigned}/96 nonzero assignments`,
+        message: `GetMatrix(${layer}) validated; ${assigned}/127 nonzero assignments; CRC marker valid`,
       }]
-      this.#record(`${layer} matrix read and validated: ${assigned}/96 nonzero assignments`)
+      this.#record(`${layer} matrix read and validated: ${assigned}/127 nonzero assignments; CRC marker valid`)
     } catch (error) {
       const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       this.#featureReads = [...this.#featureReads, {

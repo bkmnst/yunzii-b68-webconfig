@@ -1,9 +1,11 @@
 import { LIVE_RGB_PAYLOAD_LENGTH, LIVE_RGB_REPORT_ID } from './protocol'
 import { decodeMacroAssignment, type MacroPlaybackMode } from './macro'
 
-export const B68_MATRIX_ENTRY_COUNT = 96
+export const B68_MATRIX_ENTRY_COUNT = 128
 export const B68_MATRIX_ENTRY_SIZE = 4
 export const B68_MATRIX_BYTE_LENGTH = B68_MATRIX_ENTRY_COUNT * B68_MATRIX_ENTRY_SIZE
+export const B68_MATRIX_CRC_INDEX = 127
+export const B68_MATRIX_CRC_BYTES = [0x00, 0x00, 0x5a, 0xa5] as const
 
 export type B68Layer = 'default' | 'fn1' | 'fn2' | 'tap'
 export const B68_LAYERS: readonly B68Layer[] = ['default', 'fn1', 'fn2', 'tap']
@@ -24,10 +26,12 @@ export type SemanticMatrixAssignment =
   | { kind: 'fn' }
   | { kind: 'device-command'; command: number }
   | { kind: 'lighting-command'; group: number; value: number; parameter: number }
+  | { kind: 'crc-marker' }
   | { kind: 'unknown'; bytes: readonly [number, number, number, number] }
 
 export function decodeSemanticAssignment(assignment: MatrixAssignment): SemanticMatrixAssignment {
   const [type, modifiers, parameter, usage] = assignment.bytes
+  if (type === 0 && modifiers === 0 && parameter === 0x5a && usage === 0xa5) return { kind: 'crc-marker' }
   if (type === 0 && modifiers === 0 && parameter === 0 && usage === 0) return { kind: 'disabled' }
   if (type === 0 && parameter === 0) return { kind: 'keyboard', modifiers, usage }
   if (type === 0x03) {
@@ -80,6 +84,9 @@ export function encodeMatrixLayer(matrix: B68MatrixLayer): Uint8Array {
     assignment.bytes.forEach(assertByte)
     result.set(assignment.bytes, index * B68_MATRIX_ENTRY_SIZE)
   })
+  if (!B68_MATRIX_CRC_BYTES.every((byte, offset) => result[B68_MATRIX_CRC_INDEX * 4 + offset] === byte)) {
+    throw new RangeError('B68 matrix CRC marker is missing or invalid.')
+  }
   return result
 }
 
@@ -89,10 +96,13 @@ export function decodeMatrixLayer(layer: B68Layer, bytes: Uint8Array): B68Matrix
   for (let offset = 0; offset < bytes.length; offset += B68_MATRIX_ENTRY_SIZE) {
     assignments.push({ bytes: [bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]] })
   }
+  if (!B68_MATRIX_CRC_BYTES.every((byte, offset) => bytes[B68_MATRIX_CRC_INDEX * 4 + offset] === byte)) {
+    throw new RangeError('B68 matrix CRC marker is missing or invalid.')
+  }
   return { layer, assignments }
 }
 
-/** Validates the native/WebHID response envelope before decoding its 96 assignments. */
+/** Validates the native/WebHID response envelope before decoding all 128 entries. */
 export function parseMatrixResponse(layer: B68Layer, response: DataView): B68MatrixLayer {
   const bytes = new Uint8Array(response.buffer, response.byteOffset, response.byteLength)
   const start = bytes[0] === LIVE_RGB_REPORT_ID ? 1 : 0

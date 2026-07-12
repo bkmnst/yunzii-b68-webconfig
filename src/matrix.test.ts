@@ -8,42 +8,45 @@ import {
   decodeSemanticAssignment,
   encodeKeyboardAssignment,
   encodeMatrixLayer,
+  type MatrixAssignment,
   parseMatrixResponse,
 } from './matrix'
 
 describe('B68 matrix protocol', () => {
-  it('builds a layer-specific 384-byte GetMatrix request', () => {
+  it('builds a layer-specific 512-byte GetMatrix request', () => {
     const payload = buildGetMatrixPayload('fn2')
     expect(payload).toHaveLength(519)
-    expect([...payload.slice(0, 7)]).toEqual([0x83, 2, 0, 1, 0, 0x80, 0x01])
+    expect([...payload.slice(0, 7)]).toEqual([0x83, 2, 0, 1, 0, 0x00, 0x02])
   })
 
-  it('round-trips exactly 96 four-byte assignments', () => {
-    const assignments = Array.from({ length: B68_MATRIX_ENTRY_COUNT }, (_, index) => ({
-      bytes: [3, 1, 1, index] as const,
+  it('round-trips exactly 128 entries including the required CRC marker', () => {
+    const assignments: MatrixAssignment[] = Array.from({ length: B68_MATRIX_ENTRY_COUNT }, (_, index) => ({
+      bytes: [3, 1, 1, index],
     }))
+    assignments[127] = { bytes: [0, 0, 0x5a, 0xa5] }
     const encoded = encodeMatrixLayer({ layer: 'default', assignments })
     expect(encoded).toHaveLength(B68_MATRIX_BYTE_LENGTH)
     expect(decodeMatrixLayer('default', encoded)).toEqual({ layer: 'default', assignments })
     const write = buildSetMatrixPayload({ layer: 'fn1', assignments })
-    expect([...write.slice(0, 7)]).toEqual([0x03, 1, 0, 1, 0, 0x80, 1])
+    expect([...write.slice(0, 7)]).toEqual([0x03, 1, 0, 1, 0, 0, 2])
     expect([...write.slice(7, 7 + B68_MATRIX_BYTE_LENGTH)]).toEqual([...encoded])
-    expect([...write.slice(7 + B68_MATRIX_BYTE_LENGTH)]).toEqual(Array(128).fill(0))
+    expect([...write.slice(7 + B68_MATRIX_BYTE_LENGTH)]).toEqual([])
   })
 
   it('accepts the observed native report-ID prefix and rejects mismatched layers', () => {
     const response = new Uint8Array(520)
     response[0] = 6
-    response.set([0x83, 1, 0, 1, 0, 0x80, 1], 1)
+    response.set([0x83, 1, 0, 1, 0, 0x00, 0x02], 1)
     response.fill(0x12, 8, 8 + B68_MATRIX_BYTE_LENGTH)
-    expect(parseMatrixResponse('fn1', new DataView(response.buffer)).assignments).toHaveLength(96)
+    response.set([0, 0, 0x5a, 0xa5], 8 + 127 * 4)
+    expect(parseMatrixResponse('fn1', new DataView(response.buffer)).assignments).toHaveLength(128)
     expect(() => parseMatrixResponse('fn2', new DataView(response.buffer))).toThrow('layer')
   })
 
   it('rejects incomplete matrices and malformed response lengths', () => {
-    expect(() => decodeMatrixLayer('tap', new Uint8Array(383))).toThrow('384')
+    expect(() => decodeMatrixLayer('tap', new Uint8Array(511))).toThrow('512')
     const response = buildGetMatrixPayload('default')
-    response[5] = 0
+    response[6] = 1
     expect(() => parseMatrixResponse('default', new DataView(response.buffer))).toThrow('declared')
   })
 
