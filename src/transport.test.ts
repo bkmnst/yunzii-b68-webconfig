@@ -139,6 +139,31 @@ describe('KeyboardTransport', () => {
     })
   })
 
+  it('uses only the confirmed semantic GetLED request and validates its response', async () => {
+    const response = new Uint8Array(519)
+    response.set([0x84, 0, 0, 1, 0, 0x90, 1])
+    response.fill(0x5a, 7, 407)
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00, usage: 1, type: 0, children: [], inputReports: [], outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+      receiveFeatureReport: vi.fn(async () => new DataView(response.buffer)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.inspectOnboardLighting()
+
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(1)
+    const payload = vi.mocked(device.sendFeatureReport).mock.calls[0][1] as Uint8Array
+    expect([...payload.slice(0, 7)]).toEqual([0x84, 0, 0, 1, 0, 0x90, 1])
+    expect(transport.diagnostics()?.featureReads[0]).toMatchObject({
+      reportId: 6,
+      result: 'ok',
+      message: expect.stringContaining('400-byte'),
+    })
+  })
+
   it('sends only the semantic live RGB feature report', async () => {
     const device = mockDevice({
       collections: [{

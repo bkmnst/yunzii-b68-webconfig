@@ -1,0 +1,62 @@
+# B68 protocol evidence
+
+This document records independently recovered protocol facts from static analysis of the extracted vendor executable. The executable was not run. Addresses refer to the analyzed `OemDrv.exe` image and vendor binaries are intentionally excluded from Git.
+
+## HID interfaces
+
+- Wired B68: `258A:010C`, configuration firmware family `Fw=24`.
+- Wireless dongle: `3554:FA09`; its transport remains unconfirmed.
+- The wired configuration interface uses feature report 6 with a native length of 520 bytes. WebHID passes the report ID separately and therefore exposes a 519-byte payload.
+
+## Configuration envelope
+
+`CDevG5KB::AccessData` selects native report ID 6 for `Fw=24`. A one-page WebHID payload has this seven-byte envelope:
+
+| Offset | Meaning |
+| --- | --- |
+| 0 | semantic command |
+| 1 | selector, zero where unused |
+| 2 | reserved zero |
+| 3 | one-based page number |
+| 4 | reserved zero |
+| 5 | data length, low byte |
+| 6 | data length, high byte |
+| 7... | data or zero padding |
+
+The native implementation chunks larger transfers at 512 data bytes. Read operations send the request with `HidD_SetFeature`, wait, and then call `HidD_GetFeature`.
+
+## Confirmed semantic commands
+
+| Command | Read/write | Vendor method | Status |
+| --- | --- | --- | --- |
+| `0x04` | write | `SetLED` | Envelope confirmed; data layout still being decoded |
+| `0x84` | read | `GetLED` | 400-byte data block; shipped as a guarded diagnostic read |
+| `0x05` / `0x85` | write/read | `SetMacro` / `GetMacro` | Envelope confirmed; data layout pending |
+| `0x06` / `0x86` | write/read | `SetGame` / `GetGame` | Envelope confirmed; selector/layout pending |
+| `0x0A` / `0x8A` | write/read | `SetLedRgbTab` / `GetLedRgbTab` | 512-byte RGB table; layout partly recovered |
+| `0x0B` | write | `SetScreenParam` | Out of scope unless B68 evidence shows a keyboard use |
+| `0x11` | write | `ResetDevice` | Explicitly forbidden and not implemented |
+
+The paired read command is the write command with bit 7 set. This is documented evidence, not permission to synthesize or expose arbitrary commands.
+
+## Onboard lighting
+
+The wired sync routine calls `GetLED` with exactly 400 bytes and retries malformed data at most three times. The confirmed WebHID request prefix is:
+
+```text
+84 00 00 01 00 90 01
+```
+
+The response must echo command `0x84`, selector zero, reserved zero, page 1, and length 400 before its data is accepted. The vendor sync routine additionally validates fields inside the data block; those offsets are not yet all named.
+
+The write path builds a separate 512-byte RGB table and calls the vtable method at offset `0x70` (`SetLedRgbTab`, command `0x0A`). It places the validity bytes `5A A5` at table offsets 506 and 507. The table contains groups of RGB triplets assembled from the application model. This table is not the same packet as live RGB report command `0x08`.
+
+## Firmware and battery
+
+The Windows app obtains its displayed USB firmware value from `HidD_GetAttributes().VersionNumber`, not from a B68 vendor query. WebHID does not expose that field. Report-6 model identity is useful device evidence but must not be labeled as firmware.
+
+The located battery command belongs to the vendor's mouse protocol, not the B68 keyboard. `ShowPower=0` in the B68 configuration also indicates that the Windows UI hides this value. No keyboard battery query is shipped until wired or dongle evidence establishes one.
+
+## Safety boundary
+
+Only named operations with a statically supported purpose and fixed packet construction may reach the transport. Firmware writing, bootloader entry, reset, factory reset, and a generic raw-send UI/API remain forbidden.

@@ -43,6 +43,6 @@ WebHID requires a secure context. Use the local development URL or HTTPS. The pr
 
 ## Reverse-engineering notes
 
-Static evidence from the extracted Windows application shows use of `HidD_GetFeature`, `HidD_SetFeature`, `ReadFile`, and `WriteFile`, with no separate kernel driver. Its configuration identifies `Fw=24` and `CRC=1`, but those values alone are not sufficient evidence for a safe command implementation.
+Static evidence from the extracted Windows application shows use of `HidD_GetFeature`, `HidD_SetFeature`, `ReadFile`, and `WriteFile`, with no separate kernel driver. The first confirmed read-only configuration operation, `GetLED`, is implemented with a fixed request and strict response-envelope validation. Detailed evidence and the recovered command matrix are in [docs/protocol.md](docs/protocol.md).
 
 The original installer and all extracted vendor binaries and assets are intentionally excluded from version control and must not be redistributed with this project.
