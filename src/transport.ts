@@ -33,6 +33,7 @@ export class KeyboardTransport extends EventTarget {
   #livePayload: Uint8Array<ArrayBuffer> | null = null
   #liveColorTimer: ReturnType<typeof setInterval> | null = null
   #configuration: MetricResult<B68OnboardConfiguration> = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
+  #firmware: MetricResult<FirmwareInfo> = unsupportedFirmware()
   #matrices = new Map<B68Layer, B68MatrixLayer>()
 
   get device(): HIDDevice | null { return this.#device }
@@ -59,6 +60,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
+    this.#firmware = unsupportedFirmware()
     this.#matrices.clear()
     this.#record(
       `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
@@ -88,6 +90,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
+    this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
     this.#record('Disconnected')
     if (device?.opened) await device.close()
@@ -105,6 +108,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
+    this.#firmware = { state: 'disconnected', message: 'Connect the keyboard first.' }
     this.#matrices.clear()
     this.#record('Device disconnected')
     this.dispatchEvent(new Event('statuschange'))
@@ -112,6 +116,7 @@ export class KeyboardTransport extends EventTarget {
 
   async queryFirmware(): Promise<MetricResult<FirmwareInfo>> {
     if (!this.#device?.opened) return { state: 'disconnected', message: 'Connect the keyboard first.' }
+    if (this.#firmware.state === 'available') return this.#firmware
     const supportsReport5 = this.#collections.some((collection) =>
       collection.featureReports.some((report) => report.reportId === 5),
     )
@@ -160,6 +165,18 @@ export class KeyboardTransport extends EventTarget {
       this.#record(`Identity report failed: ${message}`)
       return { state: 'invalid-response', message: `Identity query failed: ${message}`, raw: [] }
     }
+  }
+
+  acceptUsbFirmware(result: MetricResult<FirmwareInfo>, vendorId: number, productId: number): void {
+    if (!this.#device?.opened || !this.#knownDevice) throw new Error('Connect the keyboard through WebHID first.')
+    if (this.#device.vendorId !== vendorId || this.#device.productId !== productId) {
+      throw new Error('The USB descriptor does not belong to the connected keyboard.')
+    }
+    this.#firmware = result
+    this.#record(result.state === 'available'
+      ? `USB firmware descriptor read: ${result.value.formatted}`
+      : `USB firmware descriptor invalid: ${result.message}`)
+    this.dispatchEvent(new Event('statuschange'))
   }
 
   async queryBattery(): Promise<MetricResult<number>> {
@@ -291,7 +308,7 @@ export class KeyboardTransport extends EventTarget {
       connected,
       knownDevice: this.#knownDevice,
       productName: this.#device?.productName ?? null,
-      firmware: connected ? unsupportedFirmware() : disconnected,
+      firmware: connected ? this.#firmware : disconnected,
       battery: connected && this.#knownDevice ? unsupportedBattery(this.#knownDevice.connectionType) : disconnected,
       configuration: connected ? this.#configuration : disconnected,
       lastRefresh: null,

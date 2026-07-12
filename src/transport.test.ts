@@ -72,6 +72,16 @@ describe('KeyboardTransport', () => {
     expect(device.sendFeatureReport).not.toHaveBeenCalled()
   })
 
+  it('retains a descriptor firmware result and binds it to the connected VID/PID', async () => {
+    const transport = new KeyboardTransport()
+    await transport.connect(mockDevice())
+    const firmware = { state: 'available', value: { formatted: '0x0100 (1.0.0)' }, raw: [0, 1] } as const
+    expect(() => transport.acceptUsbFirmware(firmware, 0x3554, 0xfa09)).toThrow('does not belong')
+    transport.acceptUsbFirmware(firmware, 0x258a, 0x010c)
+    expect(transport.status().firmware).toEqual(firmware)
+    expect(await transport.queryFirmware()).toEqual(firmware)
+  })
+
   it('reads feature report 5 without sending a report', async () => {
     const bytes = Uint8Array.from([0x12, 0x34, 0x56, 0x78, 0x64])
     const device = mockDevice({

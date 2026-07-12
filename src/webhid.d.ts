@@ -58,5 +58,18 @@ interface HIDDeviceFilter {
 
 interface Navigator {
   readonly hid: HID
+  readonly usb?: USB
 }
 
+interface USBDevice {
+  readonly vendorId: number
+  readonly productId: number
+  readonly productName?: string
+  readonly deviceVersionMajor: number
+  readonly deviceVersionMinor: number
+  readonly deviceVersionSubminor: number
+}
+
+interface USB {
+  requestDevice(options: { filters: Array<{ vendorId: number; productId?: number }> }): Promise<USBDevice>
+}

@@ -13,6 +13,7 @@ import {
 } from './profiles'
 import { KeyboardTransport } from './transport'
 import type { DeviceStatus, MetricResult } from './types'
+import { B68_WIRED_PRODUCT_ID, B68_WIRED_VENDOR_ID, firmwareFromUsbDescriptor } from './usb-firmware'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 const transport = new KeyboardTransport()
@@ -67,6 +68,7 @@ app.innerHTML = `
       </div>
       <div class="refresh-row">
         <button id="refresh" class="text-button" disabled>Refresh status</button>
+        <button id="read-usb-firmware" class="text-button" disabled>Read USB firmware</button>
         <span id="last-refresh">Not refreshed</span>
       </div>
     </section>
@@ -126,6 +128,7 @@ const ui = {
   connect: document.querySelector<HTMLButtonElement>('#connect')!,
   disconnect: document.querySelector<HTMLButtonElement>('#disconnect')!,
   refresh: document.querySelector<HTMLButtonElement>('#refresh')!,
+  readUsbFirmware: document.querySelector<HTMLButtonElement>('#read-usb-firmware')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
   matrixLayer: document.querySelector<HTMLSelectElement>('#matrix-layer')!,
@@ -256,6 +259,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.connect.hidden = status.connected
   ui.disconnect.hidden = !status.connected
   ui.refresh.disabled = !status.connected
+  ui.readUsbFirmware.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired' || !navigator.usb
   ui.copy.disabled = !status.connected
   ui.inspectMatrix.disabled = !status.connected || status.knownDevice?.connectionType !== 'wired'
   ui.applyColor.disabled = !status.connected
@@ -312,6 +316,29 @@ async function refresh(): Promise<void> {
 ui.connect.addEventListener('click', () => void connect())
 ui.disconnect.addEventListener('click', () => void transport.disconnect())
 ui.refresh.addEventListener('click', () => void refresh())
+ui.readUsbFirmware.addEventListener('click', async () => {
+  if (!navigator.usb) {
+    ui.notice.textContent = 'WebUSB is unavailable in this browser.'
+    return
+  }
+  ui.readUsbFirmware.disabled = true
+  ui.notice.textContent = 'Select the same wired B68 to read its USB device-version descriptor. No interface will be opened or claimed.'
+  try {
+    const device = await navigator.usb.requestDevice({ filters: [{ vendorId: B68_WIRED_VENDOR_ID, productId: B68_WIRED_PRODUCT_ID }] })
+    const result = firmwareFromUsbDescriptor(device)
+    transport.acceptUsbFirmware(result, device.vendorId, device.productId)
+    render()
+    ui.notice.textContent = result.state === 'available'
+      ? `USB firmware descriptor read: ${result.value.formatted}.`
+      : result.message
+  } catch (error) {
+    ui.notice.textContent = error instanceof DOMException && error.name === 'NotFoundError'
+      ? 'No USB device was selected.'
+      : error instanceof Error ? error.message : 'The USB firmware descriptor could not be read.'
+  } finally {
+    render()
+  }
+})
 ui.copy.addEventListener('click', async () => {
   const report = transport.diagnostics()
   if (!report) return

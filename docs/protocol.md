@@ -75,7 +75,7 @@ The on-device four-byte key assignment is `03`, a playback flag (`01`, `02`, or 
 
 ## Firmware and battery
 
-The Windows app obtains its displayed USB firmware value from `HidD_GetAttributes().VersionNumber`, not from a B68 vendor query. WebHID does not expose that field. Report-6 model identity is useful device evidence but must not be labeled as firmware.
+The Windows app obtains its displayed USB firmware value from `HidD_GetAttributes().VersionNumber`, not from a B68 vendor query. WebHID does not expose that field. For the wired `258A:010C` device, the app offers a separate user-gesture WebUSB descriptor read and reconstructs that same `bcdDevice` word from Chromium's major/minor/subminor fields; it does not open or claim an interface. Report-6 model identity is useful device evidence but must not be labeled as firmware.
 
 The located battery command belongs to the vendor's mouse protocol, not the B68 keyboard. `ShowPower=0` in the B68 configuration also indicates that the Windows UI hides this value. No keyboard battery query is shipped until wired or dongle evidence establishes one.
 
