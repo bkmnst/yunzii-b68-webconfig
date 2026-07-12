@@ -1,6 +1,6 @@
 import { allCollections, matchKnownDevice } from './devices'
 import { parseB68OnboardConfiguration, type B68OnboardConfiguration } from './configuration'
-import { buildGetMatrixPayload, parseMatrixResponse, type B68Layer } from './matrix'
+import { buildGetMatrixPayload, parseMatrixResponse, type B68Layer, type B68MatrixLayer } from './matrix'
 import {
   buildLiveRgbPayload,
   buildIdentityQueryPayload,
@@ -33,6 +33,7 @@ export class KeyboardTransport extends EventTarget {
   #livePayload: Uint8Array<ArrayBuffer> | null = null
   #liveColorTimer: ReturnType<typeof setInterval> | null = null
   #configuration: MetricResult<B68OnboardConfiguration> = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
+  #matrices = new Map<B68Layer, B68MatrixLayer>()
 
   get device(): HIDDevice | null { return this.#device }
   get knownDevice(): KnownDevice | null { return this.#knownDevice }
@@ -41,6 +42,7 @@ export class KeyboardTransport extends EventTarget {
     return this.#collections.filter((collection) => collection.vendorDefined).length
   }
   get livePreviewActive(): boolean { return this.#liveColorTimer !== null }
+  matrix(layer: B68Layer): B68MatrixLayer | undefined { return this.#matrices.get(layer) }
 
   async connect(device: HIDDevice): Promise<void> {
     const known = matchKnownDevice(device)
@@ -57,6 +59,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'unsupported', message: 'Onboard configuration has not been read yet.' }
+    this.#matrices.clear()
     this.#record(
       `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
     )
@@ -85,6 +88,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
+    this.#matrices.clear()
     this.#record('Disconnected')
     if (device?.opened) await device.close()
     this.dispatchEvent(new Event('statuschange'))
@@ -101,6 +105,7 @@ export class KeyboardTransport extends EventTarget {
     this.#featureReads = []
     this.#inputReports = []
     this.#configuration = { state: 'disconnected', message: 'Connect the keyboard first.' }
+    this.#matrices.clear()
     this.#record('Device disconnected')
     this.dispatchEvent(new Event('statuschange'))
   }
@@ -216,6 +221,7 @@ export class KeyboardTransport extends EventTarget {
       const view = await this.#device.receiveFeatureReport(6)
       bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
       const matrix = parseMatrixResponse(layer, view)
+      this.#matrices.set(layer, matrix)
       const assigned = matrix.assignments.filter((assignment) => assignment.bytes.some((byte) => byte !== 0)).length
       this.#featureReads = [...this.#featureReads, {
         reportId: 6,

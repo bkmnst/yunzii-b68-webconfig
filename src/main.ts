@@ -1,4 +1,5 @@
 import './style.css'
+import { assignmentLabel } from './assignment-label'
 import { DEVICE_FILTERS, matchKnownDevice, preferWired } from './devices'
 import { B68_KEY_ROWS } from './layout'
 import { B68_LAYERS, type B68Layer } from './matrix'
@@ -168,7 +169,12 @@ for (const row of B68_KEY_ROWS) {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'keyboard-key'
-    button.textContent = key.label
+    const keyLabel = document.createElement('span')
+    keyLabel.className = 'key-label'
+    keyLabel.textContent = key.label
+    const assignment = document.createElement('small')
+    assignment.className = 'key-assignment'
+    button.append(keyLabel, assignment)
     button.dataset.led = String(key.ledIndex)
     button.style.setProperty('--key-width', String(key.width ?? 1))
     button.setAttribute('aria-pressed', 'false')
@@ -190,6 +196,18 @@ function renderKeyColors(): void {
     const assigned = keyColors.get(led)
     button.style.setProperty('--key-color', assigned ? `rgb(${assigned.red} ${assigned.green} ${assigned.blue})` : 'transparent')
     button.classList.toggle('painted', Boolean(assigned))
+  }
+}
+
+function renderKeymap(layer: B68Layer): void {
+  const matrix = transport.matrix(layer)
+  for (const button of ui.keyGrid.querySelectorAll<HTMLButtonElement>('.keyboard-key')) {
+    const index = Number(button.dataset.led)
+    const assignment = button.querySelector<HTMLElement>('.key-assignment')!
+    const decoded = matrix?.assignments[index]
+    assignment.textContent = decoded ? assignmentLabel(decoded) : ''
+    button.title = decoded ? `${layer.toUpperCase()}: ${assignment.textContent}` : ''
+    button.classList.toggle('keymap-read', Boolean(decoded))
   }
 }
 
@@ -306,6 +324,7 @@ ui.inspectMatrix.addEventListener('click', async () => {
   ui.inspectMatrix.disabled = true
   ui.notice.textContent = `Reading and validating the ${layer.toUpperCase()} keymap…`
   await transport.inspectMatrix(layer)
+  renderKeymap(layer)
   render()
   ui.notice.textContent = `${layer.toUpperCase()} keymap diagnostic complete. Copy the report to share the validated result.`
 })
