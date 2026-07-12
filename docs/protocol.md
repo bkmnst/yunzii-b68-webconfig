@@ -37,7 +37,7 @@ The native implementation chunks larger transfers at 512 data bytes. Read operat
 | `0x0B` | write | `SetScreenParam` | Out of scope unless B68 evidence shows a keyboard use |
 | `0x11` | write | `ResetDevice` | Explicitly forbidden and not implemented |
 
-`SetMatrix` / `GetMatrix` are the separate command pair `0x03` / `0x83`. The selector is the zero-based layer number: Default, FN1, FN2, or Tap. The B68 matrix has 96 four-byte hardware assignments, so each layer transfer is exactly 384 bytes. Physical keys use the matrix indices recorded in `KB.ini` (1 through 95 for this layout, with unused positions retained). A strict read-query builder and response codec are implemented offline; no arbitrary matrix bytes are exposed to the UI.
+`SetMatrix` / `GetMatrix` are the separate command pair `0x03` / `0x83`. The selector is the zero-based layer number: Default, FN1, FN2, or Tap. The B68 matrix has 96 four-byte hardware assignments, so each layer transfer is exactly 384 bytes. Physical keys use the matrix indices recorded in `KB.ini` (1 through 95 for this layout, with unused positions retained). A strict read-query builder and response codec are implemented, and the diagnostic UI permits one explicitly selected read at a time; no arbitrary matrix bytes are exposed to the UI.
 
 The paired read command is the write command with bit 7 set. This is documented evidence, not permission to synthesize or expose arbitrary commands.
 

@@ -177,7 +177,7 @@ describe('KeyboardTransport', () => {
     })
     const transport = new KeyboardTransport()
     await transport.connect(device)
-    await transport.inspectDefaultMatrix()
+    await transport.inspectMatrix('default')
 
     const payload = vi.mocked(device.sendFeatureReport).mock.calls[0][1] as Uint8Array
     expect([...payload.slice(0, 7)]).toEqual([0x83, 0, 0, 1, 0, 0x80, 1])

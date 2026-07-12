@@ -1,6 +1,7 @@
 import './style.css'
 import { DEVICE_FILTERS, matchKnownDevice, preferWired } from './devices'
 import { B68_KEY_ROWS } from './layout'
+import { B68_LAYERS, type B68Layer } from './matrix'
 import {
   createLightingProfile,
   loadStoredProfiles,
@@ -95,7 +96,13 @@ app.innerHTML = `
       <summary>Advanced diagnostics <span>Descriptors only</span></summary>
       <div class="diagnostic-actions">
         <p>Useful for identifying the safe vendor-defined report channel. This information never leaves your browser.</p>
-        <button id="inspect-matrix" class="secondary" disabled>Read default keymap</button>
+        <select id="matrix-layer" aria-label="Diagnostic keymap layer">
+          <option value="default">Default keymap</option>
+          <option value="fn1">FN1 keymap</option>
+          <option value="fn2">FN2 keymap</option>
+          <option value="tap">Tap keymap</option>
+        </select>
+        <button id="inspect-matrix" class="secondary" disabled>Read selected keymap</button>
         <button id="copy" class="secondary" disabled>Copy report</button>
       </div>
       <pre id="diagnostic-output">Connect a keyboard to inspect its HID collections.</pre>
@@ -110,6 +117,7 @@ const ui = {
   refresh: document.querySelector<HTMLButtonElement>('#refresh')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
   inspectMatrix: document.querySelector<HTMLButtonElement>('#inspect-matrix')!,
+  matrixLayer: document.querySelector<HTMLSelectElement>('#matrix-layer')!,
   applyColor: document.querySelector<HTMLButtonElement>('#apply-color')!,
   liveColor: document.querySelector<HTMLInputElement>('#live-color')!,
   stopColor: document.querySelector<HTMLButtonElement>('#stop-color')!,
@@ -275,11 +283,13 @@ ui.copy.addEventListener('click', async () => {
   ui.notice.textContent = 'Diagnostic report copied. It has not been uploaded anywhere.'
 })
 ui.inspectMatrix.addEventListener('click', async () => {
+  const layer = ui.matrixLayer.value as B68Layer
+  if (!B68_LAYERS.includes(layer)) return
   ui.inspectMatrix.disabled = true
-  ui.notice.textContent = 'Reading and validating the Default keymap…'
-  await transport.inspectDefaultMatrix()
+  ui.notice.textContent = `Reading and validating the ${layer.toUpperCase()} keymap…`
+  await transport.inspectMatrix(layer)
   render()
-  ui.notice.textContent = 'Default keymap diagnostic complete. Copy the report to share the validated result.'
+  ui.notice.textContent = `${layer.toUpperCase()} keymap diagnostic complete. Copy the report to share the validated result.`
 })
 ui.applyColor.addEventListener('click', async () => {
   const hex = ui.liveColor.value.slice(1)
