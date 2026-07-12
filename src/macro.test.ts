@@ -34,9 +34,9 @@ describe('macro archive codec', () => {
   })
 
   it('encodes and validates macro key assignments', () => {
-    expect([...encodeMacroAssignment(7, 0, 3)]).toEqual([0x03, 0x01, 0x03, 0x07])
-    expect(decodeMacroAssignment(encodeMacroAssignment(99, 2))).toEqual({ index: 99, setting: 2, repeatCount: 1 })
-    expect(() => encodeMacroAssignment(100, 0)).toThrow('index')
+    expect([...encodeMacroAssignment(7, 'count', 3)]).toEqual([0x03, 0x01, 0x03, 0x07])
+    expect(decodeMacroAssignment(encodeMacroAssignment(99, 'until-any-key'))).toEqual({ index: 99, mode: 'until-any-key', repeatCount: 1 })
+    expect(() => encodeMacroAssignment(100, 'count')).toThrow('index')
     expect(() => decodeMacroAssignment(Uint8Array.of(3, 4, 2, 0))).toThrow('playback')
   })
 })

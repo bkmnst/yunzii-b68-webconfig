@@ -61,7 +61,7 @@ Static analysis of `FillMatrix` and `StMacro_To_HdMacro` confirms that the macro
 
 A record begins with a one-byte UTF-16LE name byte length and the name bytes. The remaining bytes are four-byte events: `(type << 4) | delay[19:16]`, `delay[15:8]`, `delay[7:0]`, and an event value. Delays are capped at `0xFFFFF`. Event types 1 through 5 represent keyboard, mouse-button, and three pointer/wheel forms; for type 1, bit 7 marks key release. The layer matrix uses action type `0x05` and references these records by a one-based internal buffer ID.
 
-The on-device four-byte key assignment is `03`, a playback flag (`01`, `02`, or `04`), repeat count, and zero-based macro index. The first playback setting uses the configured repeat count; the other two force that byte to one. The source includes strict offline codecs for both this assignment and the confirmed archive format. Macro writes remain disconnected from the WebHID transport until the three playback settings have semantic labels and the complete matrix readback path is validated.
+The on-device four-byte key assignment is `03`, a playback flag (`01`, `02`, or `04`), repeat count, and zero-based macro index. The extracted English resource and matching code order identify these as fixed cycle count, cycle until the assigned key is released, and cycle until any key is pressed. Fixed-count mode uses the configured repeat count; the other two force that byte to one. The source includes strict offline codecs for both this assignment and the confirmed archive format. Macro writes remain disconnected from the WebHID transport until the complete matrix readback path is validated.
 
 ## Firmware and battery
 

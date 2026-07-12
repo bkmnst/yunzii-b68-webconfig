@@ -18,22 +18,29 @@ export interface HardwareMacro {
   events: readonly HardwareMacroEvent[]
 }
 
-export type MacroPlaybackSetting = 0 | 1 | 2
+export type MacroPlaybackMode = 'count' | 'until-release' | 'until-any-key'
+
+export const MACRO_PLAYBACK_MODES: ReadonlyArray<{ mode: MacroPlaybackMode; flag: 1 | 2 | 4 }> = [
+  { mode: 'count', flag: 1 },
+  { mode: 'until-release', flag: 2 },
+  { mode: 'until-any-key', flag: 4 },
+]
 
 /** Encodes the confirmed four-byte key-matrix reference to a macro record. */
-export function encodeMacroAssignment(index: number, setting: MacroPlaybackSetting, repeatCount = 1): Uint8Array {
+export function encodeMacroAssignment(index: number, mode: MacroPlaybackMode, repeatCount = 1): Uint8Array {
   if (!Number.isInteger(index) || index < 0 || index >= MACRO_MAX_COUNT) throw new RangeError('Macro index is out of range.')
-  if (setting !== 0 && setting !== 1 && setting !== 2) throw new RangeError('Macro playback setting must be 0, 1, or 2.')
+  const setting = MACRO_PLAYBACK_MODES.findIndex((entry) => entry.mode === mode)
+  if (setting < 0) throw new RangeError('Unknown macro playback mode.')
   assertByte(repeatCount, 'Macro repeat count')
   if (setting === 0 && repeatCount === 0) throw new RangeError('Macro repeat count must be at least 1 for playback setting 0.')
   return Uint8Array.of(0x03, 1 << setting, setting === 0 ? repeatCount : 1, index)
 }
 
-export function decodeMacroAssignment(bytes: Uint8Array): { index: number; setting: MacroPlaybackSetting; repeatCount: number } {
+export function decodeMacroAssignment(bytes: Uint8Array): { index: number; mode: MacroPlaybackMode; repeatCount: number } {
   if (bytes.length !== 4 || bytes[0] !== 0x03 || bytes[3] >= MACRO_MAX_COUNT) throw new RangeError('Invalid macro key assignment.')
   const setting = bytes[1] === 1 ? 0 : bytes[1] === 2 ? 1 : bytes[1] === 4 ? 2 : -1
   if (setting < 0 || (setting !== 0 && bytes[2] !== 1) || bytes[2] === 0) throw new RangeError('Invalid macro playback fields.')
-  return { index: bytes[3], setting: setting as MacroPlaybackSetting, repeatCount: bytes[2] }
+  return { index: bytes[3], mode: MACRO_PLAYBACK_MODES[setting].mode, repeatCount: bytes[2] }
 }
 
 function encodeUtf16Le(value: string): Uint8Array {
