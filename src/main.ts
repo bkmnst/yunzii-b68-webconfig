@@ -250,6 +250,7 @@ async function refresh(): Promise<void> {
     transport.queryFirmware(),
     transport.queryBattery(),
   ])
+  await transport.inspectOnboardLighting()
   render({
     connected: Boolean(transport.device?.opened),
     knownDevice: transport.knownDevice,

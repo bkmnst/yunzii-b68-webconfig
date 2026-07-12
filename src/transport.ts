@@ -2,10 +2,12 @@ import { allCollections, matchKnownDevice } from './devices'
 import {
   buildLiveRgbPayload,
   buildIdentityQueryPayload,
+  buildGetOnboardLightingPayload,
   buildPerKeyRgbPayload,
   LIVE_RGB_REPORT_ID,
   type RgbColor,
   parseModelId,
+  parseOnboardLightingResponse,
   unsupportedBattery,
   unsupportedFirmware,
 } from './protocol'
@@ -154,6 +156,37 @@ export class KeyboardTransport extends EventTarget {
       return { state: 'disconnected', message: 'Connect the keyboard first.' }
     }
     return unsupportedBattery(this.#knownDevice.connectionType)
+  }
+
+  async inspectOnboardLighting(): Promise<void> {
+    if (!this.#device?.opened || this.#knownDevice?.connectionType !== 'wired') return
+    const supportsReport6 = this.#collections.some((collection) =>
+      collection.featureReports.some((report) => report.reportId === 6 && report.byteLength >= 519),
+    )
+    if (!supportsReport6) return
+
+    try {
+      await this.#device.sendFeatureReport(6, buildGetOnboardLightingPayload())
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 20))
+      const view = await this.#device.receiveFeatureReport(6)
+      const bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
+      const lighting = parseOnboardLightingResponse(view)
+      this.#featureReads = [...this.#featureReads, {
+        reportId: 6,
+        result: 'ok',
+        bytes,
+        message: `GetLED response validated; ${lighting.length}-byte onboard lighting block`,
+      }]
+      this.#record(`GetLED report read and validated: ${lighting.length} data byte(s)`)
+    } catch (error) {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      this.#featureReads = [...this.#featureReads, {
+        reportId: 6,
+        result: 'error',
+        message: `GetLED: ${message}`,
+      }]
+      this.#record(`GetLED report failed: ${message}`)
+    }
   }
 
   async setLiveColor(color: RgbColor): Promise<void> {

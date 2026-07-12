@@ -3,10 +3,12 @@ import {
   B68_LED_SLOT_COUNT,
   buildLiveRgbPayload,
   buildIdentityQueryPayload,
+  buildGetOnboardLightingPayload,
   buildPerKeyRgbPayload,
   hasConfirmedQuery,
   LIVE_RGB_PAYLOAD_LENGTH,
   parseModelId,
+  parseOnboardLightingResponse,
   validateBattery,
   validateChecksum,
 } from './protocol'
@@ -78,5 +80,23 @@ describe('identity query', () => {
     response[12] = 0xcd
     expect(parseModelId(new DataView(response.buffer))).toBe(0xcd)
     expect(() => parseModelId(new DataView(new ArrayBuffer(12)))).toThrow(RangeError)
+  })
+})
+
+describe('onboard lighting query', () => {
+  it('builds the confirmed 400-byte GetLED request', () => {
+    const payload = buildGetOnboardLightingPayload()
+    expect(payload).toHaveLength(519)
+    expect([...payload.slice(0, 7)]).toEqual([0x84, 0, 0, 1, 0, 0x90, 1])
+    expect([...payload.slice(7)]).toEqual(Array(512).fill(0))
+  })
+
+  it('accepts only a matching GetLED response envelope', () => {
+    const response = buildGetOnboardLightingPayload()
+    response.fill(0x5a, 7, 407)
+    expect(parseOnboardLightingResponse(new DataView(response.buffer))).toHaveLength(400)
+    response[0] = 0x04
+    expect(() => parseOnboardLightingResponse(new DataView(response.buffer))).toThrow('header')
+    expect(() => parseOnboardLightingResponse(new DataView(new ArrayBuffer(406)))).toThrow('shorter')
   })
 })
