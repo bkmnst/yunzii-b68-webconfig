@@ -14,6 +14,7 @@ export class KeyboardTransport extends EventTarget {
   #knownDevice: KnownDevice | null = null
   #collections: HidReportDescriptor[] = []
   #events: string[] = []
+  #featureReads: DiagnosticSnapshot['featureReads'] = []
   #abortController: AbortController | null = null
 
   get device(): HIDDevice | null { return this.#device }
@@ -35,6 +36,7 @@ export class KeyboardTransport extends EventTarget {
     this.#device = device
     this.#knownDevice = known
     this.#collections = collections
+    this.#featureReads = []
     this.#record(
       `Connected: ${known.connectionType}; ${collections.length} visible collection(s); ${this.vendorCollectionCount} vendor-defined`,
     )
@@ -53,6 +55,7 @@ export class KeyboardTransport extends EventTarget {
     this.#device = null
     this.#knownDevice = null
     this.#collections = []
+    this.#featureReads = []
     this.#record('Disconnected')
     if (device?.opened) await device.close()
     this.dispatchEvent(new Event('statuschange'))
@@ -65,13 +68,40 @@ export class KeyboardTransport extends EventTarget {
     this.#device = null
     this.#knownDevice = null
     this.#collections = []
+    this.#featureReads = []
     this.#record('Device disconnected')
     this.dispatchEvent(new Event('statuschange'))
   }
 
   async queryFirmware(): Promise<MetricResult<FirmwareInfo>> {
     if (!this.#device?.opened) return { state: 'disconnected', message: 'Connect the keyboard first.' }
-    return unsupportedFirmware()
+    const supportsReport5 = this.#collections.some((collection) =>
+      collection.featureReports.some((report) => report.reportId === 5),
+    )
+    if (!supportsReport5) return unsupportedFirmware()
+
+    try {
+      const view = await this.#device.receiveFeatureReport(5)
+      const bytes = [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]
+      this.#featureReads = [
+        ...this.#featureReads.filter((read) => read.reportId !== 5),
+        { reportId: 5, result: 'ok', bytes },
+      ]
+      this.#record(`Feature report 5 read: ${bytes.length} byte(s)`)
+      return {
+        state: 'invalid-response',
+        message: 'Feature report 5 was read successfully; its firmware encoding is not decoded yet.',
+        raw: bytes,
+      }
+    } catch (error) {
+      const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      this.#featureReads = [
+        ...this.#featureReads.filter((read) => read.reportId !== 5),
+        { reportId: 5, result: 'error', message },
+      ]
+      this.#record(`Feature report 5 failed: ${message}`)
+      return { state: 'invalid-response', message: `Feature report 5 failed: ${message}`, raw: [] }
+    }
   }
 
   async queryBattery(): Promise<MetricResult<number>> {
@@ -106,6 +136,7 @@ export class KeyboardTransport extends EventTarget {
       },
       collections: this.#collections,
       vendorCollectionCount: this.vendorCollectionCount,
+      featureReads: this.#featureReads,
       events: this.#events.slice(-25),
     }
   }

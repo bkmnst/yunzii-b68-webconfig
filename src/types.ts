@@ -51,5 +51,11 @@ export interface DiagnosticSnapshot {
   }
   collections: HidReportDescriptor[]
   vendorCollectionCount: number
+  featureReads: readonly {
+    reportId: number
+    result: 'ok' | 'error'
+    bytes?: readonly number[]
+    message?: string
+  }[]
   events: readonly string[]
 }

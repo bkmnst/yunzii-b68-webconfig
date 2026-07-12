@@ -57,6 +57,51 @@ describe('KeyboardTransport', () => {
     expect(device.sendFeatureReport).not.toHaveBeenCalled()
   })
 
+  it('reads feature report 5 without sending a report', async () => {
+    const bytes = Uint8Array.from([0x12, 0x34, 0x56, 0x78, 0x64])
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00,
+        usage: 1,
+        type: 0,
+        children: [],
+        inputReports: [],
+        outputReports: [],
+        featureReports: [{ reportId: 5, items: [{ reportSize: 8, reportCount: 5 }] }],
+      }],
+      receiveFeatureReport: vi.fn(async () => new DataView(bytes.buffer)),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    const result = await transport.queryFirmware()
+    expect(result).toMatchObject({ state: 'invalid-response', raw: [...bytes] })
+    expect(device.receiveFeatureReport).toHaveBeenCalledWith(5)
+    expect(device.sendReport).not.toHaveBeenCalled()
+    expect(device.sendFeatureReport).not.toHaveBeenCalled()
+    expect(transport.diagnostics()?.featureReads).toEqual([
+      { reportId: 5, result: 'ok', bytes: [...bytes] },
+    ])
+  })
+
+  it('records feature report 5 read failures', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00,
+        usage: 1,
+        type: 0,
+        children: [],
+        inputReports: [],
+        outputReports: [],
+        featureReports: [{ reportId: 5, items: [{ reportSize: 8, reportCount: 5 }] }],
+      }],
+      receiveFeatureReport: vi.fn(async () => { throw new DOMException('Device rejected the report', 'NetworkError') }),
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    expect((await transport.queryFirmware()).state).toBe('invalid-response')
+    expect(transport.diagnostics()?.featureReads[0]).toMatchObject({ reportId: 5, result: 'error' })
+  })
+
   it('cancels state on a device disconnect', async () => {
     const transport = new KeyboardTransport()
     await transport.connect(mockDevice())

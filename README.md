@@ -13,7 +13,7 @@ The application can safely discover and inspect every HID collection Chromium ex
 
 The WebHID picker requires vendor usage page `0xFF00`, preventing Chromium from selecting the protected boot-keyboard interface (`0x01:0x06`).
 
-Firmware and battery queries remain explicitly unavailable until their exact read-only packet formats are independently confirmed through static analysis. The shipped application sends no HID reports.
+The app performs a read-only `receiveFeatureReport(5)` request when that report is exposed, preserving its raw response or browser error in Advanced diagnostics. Its firmware encoding is not presented as a value until independently confirmed. The shipped application sends no output or feature reports.
 
 ## Safety boundary
 
