@@ -13,11 +13,13 @@ The application can safely discover and inspect every HID collection Chromium ex
 
 The WebHID picker requires vendor usage page `0xFF00`, preventing Chromium from selecting the protected boot-keyboard interface (`0x01:0x06`).
 
-The app performs a read-only `receiveFeatureReport(5)` request when that report is exposed, preserving its raw response or browser error in Advanced diagnostics. Its firmware encoding is not presented as a value until independently confirmed. The shipped application sends no output or feature reports.
+The app performs a read-only `receiveFeatureReport(5)` request when that report is exposed, preserving its raw response or browser error in Advanced diagnostics. Its firmware encoding is not presented as a value until independently confirmed. No arbitrary packet-sending surface is exposed.
+
+Live solid-color preview uses the B68's vendor feature report 6 (`0xFF00:0x0001`, 519-byte WebHID payload). It fills the 96 LED slots established by the B68 layout map and does not write an onboard profile.
 
 ## Safety boundary
 
-Allowed behavior is limited to device selection, connection, descriptor inspection, passive input-report metadata, and confirmed status queries. The project does not include arbitrary packet sending, RGB or key configuration, firmware writing, bootloader entry, reset, or factory-reset operations.
+Allowed behavior currently includes device selection, descriptor inspection, status reads, and the explicit live RGB preview command. The project does not expose arbitrary packet sending and does not include firmware writing, bootloader entry, reset, or factory-reset operations.
 
 No device data is uploaded. Diagnostic reports exist only in memory and can be copied manually.
 

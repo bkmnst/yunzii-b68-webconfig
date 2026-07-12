@@ -102,6 +102,34 @@ describe('KeyboardTransport', () => {
     expect(transport.diagnostics()?.featureReads[0]).toMatchObject({ reportId: 5, result: 'error' })
   })
 
+  it('sends only the semantic live RGB feature report', async () => {
+    const device = mockDevice({
+      collections: [{
+        usagePage: 0xff00,
+        usage: 1,
+        type: 0,
+        children: [],
+        inputReports: [],
+        outputReports: [],
+        featureReports: [{ reportId: 6, items: [{ reportSize: 8, reportCount: 519 }] }],
+      }],
+    })
+    const transport = new KeyboardTransport()
+    await transport.connect(device)
+    await transport.setLiveColor({ red: 1, green: 2, blue: 3 })
+    expect(device.sendFeatureReport).toHaveBeenCalledTimes(1)
+    expect(device.sendFeatureReport).toHaveBeenCalledWith(6, expect.any(Uint8Array))
+    expect(device.sendReport).not.toHaveBeenCalled()
+  })
+
+  it('refuses live RGB when report 6 is unavailable', async () => {
+    const transport = new KeyboardTransport()
+    await transport.connect(mockDevice())
+    await expect(transport.setLiveColor({ red: 1, green: 2, blue: 3 })).rejects.toMatchObject({
+      name: 'NotSupportedError',
+    })
+  })
+
   it('cancels state on a device disconnect', async () => {
     const transport = new KeyboardTransport()
     await transport.connect(mockDevice())

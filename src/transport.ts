@@ -1,5 +1,11 @@
 import { allCollections, matchKnownDevice } from './devices'
-import { unsupportedBattery, unsupportedFirmware } from './protocol'
+import {
+  buildLiveRgbPayload,
+  LIVE_RGB_REPORT_ID,
+  type RgbColor,
+  unsupportedBattery,
+  unsupportedFirmware,
+} from './protocol'
 import type {
   DiagnosticSnapshot,
   DeviceStatus,
@@ -109,6 +115,22 @@ export class KeyboardTransport extends EventTarget {
       return { state: 'disconnected', message: 'Connect the keyboard first.' }
     }
     return unsupportedBattery(this.#knownDevice.connectionType)
+  }
+
+  async setLiveColor(color: RgbColor): Promise<void> {
+    if (!this.#device?.opened) throw new DOMException('Connect the keyboard first.', 'InvalidStateError')
+    const supportsLiveRgb = this.#collections.some((collection) =>
+      collection.featureReports.some((report) =>
+        report.reportId === LIVE_RGB_REPORT_ID && report.byteLength >= 519,
+      ),
+    )
+    if (!supportsLiveRgb) {
+      throw new DOMException('The connected interface does not expose the B68 live RGB report.', 'NotSupportedError')
+    }
+
+    const payload = buildLiveRgbPayload(color)
+    await this.#device.sendFeatureReport(LIVE_RGB_REPORT_ID, payload)
+    this.#record(`Live RGB preview sent: ${color.red},${color.green},${color.blue}`)
   }
 
   status(): DeviceStatus {

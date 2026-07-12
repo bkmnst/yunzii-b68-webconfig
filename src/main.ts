@@ -50,9 +50,21 @@ app.innerHTML = `
       </div>
     </section>
 
+    <section class="lighting-panel" aria-labelledby="lighting-title">
+      <div>
+        <p class="kicker">Lighting preview</p>
+        <h2 id="lighting-title">Live solid color</h2>
+        <p>Preview a color through the B68 real-time RGB channel. This does not overwrite an onboard profile.</p>
+      </div>
+      <div class="color-control">
+        <input id="live-color" type="color" value="#c8ff43" aria-label="Live keyboard color" />
+        <button id="apply-color" class="secondary" disabled>Apply live preview</button>
+      </div>
+    </section>
+
     <section class="trust-grid">
       <div><span>01</span><h3>Private by design</h3><p>Communication stays between this page and your keyboard.</p></div>
-      <div><span>02</span><h3>Read-only scope</h3><p>No RGB, remapping, reset, bootloader, or firmware-write commands.</p></div>
+      <div><span>02</span><h3>Guarded commands</h3><p>Only named, validated device operations are exposed—never arbitrary HID packets.</p></div>
       <div><span>03</span><h3>Chromium required</h3><p>Use desktop Chrome, Edge, or another browser with WebHID over HTTPS or localhost.</p></div>
     </section>
 
@@ -73,6 +85,8 @@ const ui = {
   disconnect: document.querySelector<HTMLButtonElement>('#disconnect')!,
   refresh: document.querySelector<HTMLButtonElement>('#refresh')!,
   copy: document.querySelector<HTMLButtonElement>('#copy')!,
+  applyColor: document.querySelector<HTMLButtonElement>('#apply-color')!,
+  liveColor: document.querySelector<HTMLInputElement>('#live-color')!,
   notice: document.querySelector<HTMLElement>('#notice')!,
   title: document.querySelector<HTMLElement>('#status-title')!,
   pill: document.querySelector<HTMLElement>('#connection-pill')!,
@@ -114,6 +128,7 @@ function render(status: DeviceStatus = transport.status()): void {
   ui.disconnect.hidden = !status.connected
   ui.refresh.disabled = !status.connected
   ui.copy.disabled = !status.connected
+  ui.applyColor.disabled = !status.connected
   ui.lastRefresh.textContent = status.lastRefresh ? `Updated ${status.lastRefresh.toLocaleTimeString()}` : 'Not refreshed'
   const diagnostics = transport.diagnostics()
   ui.diagnostics.textContent = diagnostics ? JSON.stringify(diagnostics, null, 2) : 'Connect a keyboard to inspect its HID collections.'
@@ -170,6 +185,25 @@ ui.copy.addEventListener('click', async () => {
   if (!report) return
   await navigator.clipboard.writeText(JSON.stringify(report, null, 2))
   ui.notice.textContent = 'Diagnostic report copied. It has not been uploaded anywhere.'
+})
+ui.applyColor.addEventListener('click', async () => {
+  const hex = ui.liveColor.value.slice(1)
+  const value = Number.parseInt(hex, 16)
+  const color = {
+    red: (value >> 16) & 0xff,
+    green: (value >> 8) & 0xff,
+    blue: value & 0xff,
+  }
+  ui.applyColor.disabled = true
+  try {
+    await transport.setLiveColor(color)
+    ui.notice.textContent = `Live RGB preview sent: ${ui.liveColor.value.toUpperCase()}.`
+    render()
+  } catch (error) {
+    ui.notice.textContent = error instanceof Error ? error.message : 'The live RGB preview failed.'
+  } finally {
+    ui.applyColor.disabled = !transport.status().connected
+  }
 })
 transport.addEventListener('statuschange', () => render())
 
