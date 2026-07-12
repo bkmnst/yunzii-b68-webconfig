@@ -23,6 +23,7 @@ import {
 import { KeyboardTransport } from './transport'
 import type { DeviceStatus, MetricResult } from './types'
 import { B68_WIRED_PRODUCT_ID, B68_WIRED_VENDOR_ID, firmwareFromUsbDescriptor } from './usb-firmware'
+import { encodeSafeSpecialAssignment, LIGHTING_ASSIGNMENTS, SAFE_DEVICE_ASSIGNMENTS } from './special-assignments'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 const transport = new KeyboardTransport()
@@ -95,8 +96,9 @@ app.innerHTML = `
         <label>Layer <select id="remap-layer"></select></label>
         <button id="read-remap-layer" class="secondary" disabled>Read layer</button>
         <label>Physical key <select id="remap-key"></select></label>
-        <label>Assignment <select id="remap-kind"><option value="keyboard">Keyboard key / combo</option><option value="disabled">Disable</option><option value="fn">Fn</option></select></label>
+        <label>Assignment <select id="remap-kind"><option value="keyboard">Keyboard key / combo</option><option value="device">Device action</option><option value="lighting">Lighting action</option><option value="disabled">Disable</option><option value="fn">Fn</option></select></label>
         <label>Key <select id="remap-usage"></select></label>
+        <label id="remap-special-label" hidden>Action <select id="remap-special"></select></label>
         <fieldset id="remap-modifiers"><legend>Modifiers</legend></fieldset>
         <button id="stage-remap" class="secondary" disabled>Stage assignment</button>
         <button id="apply-remap" class="primary" disabled>Apply and verify</button>
@@ -169,6 +171,8 @@ const ui = {
   remapKey: document.querySelector<HTMLSelectElement>('#remap-key')!,
   remapKind: document.querySelector<HTMLSelectElement>('#remap-kind')!,
   remapUsage: document.querySelector<HTMLSelectElement>('#remap-usage')!,
+  remapSpecial: document.querySelector<HTMLSelectElement>('#remap-special')!,
+  remapSpecialLabel: document.querySelector<HTMLElement>('#remap-special-label')!,
   remapModifiers: document.querySelector<HTMLFieldSetElement>('#remap-modifiers')!,
   stageRemap: document.querySelector<HTMLButtonElement>('#stage-remap')!,
   applyRemap: document.querySelector<HTMLButtonElement>('#apply-remap')!,
@@ -218,6 +222,13 @@ for (const modifier of MODIFIER_OPTIONS) {
   input.value = String(modifier.mask)
   label.append(input, ` ${modifier.label}`)
   ui.remapModifiers.append(label)
+}
+
+function renderSpecialAssignmentOptions(): void {
+  const options = ui.remapKind.value === 'device' ? SAFE_DEVICE_ASSIGNMENTS
+    : ui.remapKind.value === 'lighting' ? LIGHTING_ASSIGNMENTS : []
+  ui.remapSpecial.replaceChildren(...options.map((option) => new Option(option.label, option.id)))
+  ui.remapSpecialLabel.hidden = options.length === 0
 }
 
 for (const row of B68_KEY_ROWS) {
@@ -437,6 +448,7 @@ ui.remapKind.addEventListener('change', () => {
   const keyboard = ui.remapKind.value === 'keyboard'
   ui.remapUsage.disabled = !keyboard
   ui.remapModifiers.disabled = !keyboard
+  renderSpecialAssignmentOptions()
 })
 ui.readRemapLayer.addEventListener('click', async () => {
   const layer = ui.remapLayer.value as B68Layer
@@ -455,6 +467,7 @@ ui.stageRemap.addEventListener('click', () => {
   const index = Number(ui.remapKey.value)
   const assignment = ui.remapKind.value === 'disabled' ? encodeDisabledAssignment()
     : ui.remapKind.value === 'fn' ? encodeFnAssignment()
+    : ui.remapKind.value === 'device' || ui.remapKind.value === 'lighting' ? encodeSafeSpecialAssignment(ui.remapSpecial.value)
     : encodeKeyboardAssignment(
       [...ui.remapModifiers.querySelectorAll<HTMLInputElement>('input:checked')].reduce((mask, input) => mask | Number(input.value), 0),
       Number(ui.remapUsage.value),
